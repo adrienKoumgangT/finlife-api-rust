@@ -36,7 +36,7 @@ pub trait CurrencyServiceInterface {
     
     async fn get_fx_rate(&self, command: FxRateGetCommand) -> Result<Option<FxRateResponse>, Error>;
     
-    async fn create_fx_rate(&self, command: FxRateCreateCommand) -> Result<FxRateResponse, Error>;
+    async fn create_fx_rate(&self, command: FxRateCreateCommand) -> Result<Option<FxRateResponse>, Error>;
     
     async fn update_fx_rate(&self, command: FxRateUpdateRateCommand) -> Result<Option<FxRateResponse>, Error>;
     
@@ -44,7 +44,7 @@ pub trait CurrencyServiceInterface {
     
     async fn list_fx_rates(&self, command: FxRateListCommand) -> Result<Vec<FxRateResponse>, Error>;
     
-    async fn list_fx_rates_by_base_code(&self, command: FxRateByBaseCodeCommand) -> Result<Vec<FxRateResponse>, Error>;
+    async fn list_fx_rates_by_base_code(&self, command: FxRateByBaseCodeCommand) -> Result<Option<Vec<FxRateResponse>>, Error>;
     
 }
 
@@ -246,8 +246,31 @@ impl CurrencyServiceInterface for CurrencyService {
         }
     }
 
-    async fn create_fx_rate(&self, command: FxRateCreateCommand) -> Result<FxRateResponse, Error> {
+    async fn create_fx_rate(&self, command: FxRateCreateCommand) -> Result<Option<FxRateResponse>, Error> {
         let meta_user = command.auth_user.user_id.clone();
+        let fx_rate_base_code = command.fx_rate_base_code.clone();
+        let fx_rate_quote_code = command.fx_rate_quote_code.clone();
+        
+        let currency_base_code = self.currency_repo.get(fx_rate_base_code, Some(meta_user.clone())).await;
+        match currency_base_code {
+            Ok(currency) => {
+                if currency.is_none() {
+                    return Ok(None);
+                }
+            },
+            Err(_) => return Err(Error::msg("Error during getting currency base code"))
+        }
+        
+        let currency_quote_code = self.currency_repo.get(fx_rate_quote_code, Some(meta_user.clone())).await;
+        match currency_quote_code {
+            Ok(currency) => {
+                if currency.is_none() {
+                    return Ok(None);
+                }
+            },
+            Err(_) => return Err(Error::msg("Error during getting currency quote code"))
+        }
+        
         let fx_rate_create = FxRate::from(command);
         
         let fx_rate = self.fx_rate_repo.create(fx_rate_create, Some(meta_user)).await;
@@ -262,7 +285,7 @@ impl CurrencyServiceInterface for CurrencyService {
                         self.redis_key_fx_rate_ttl()
                     ).await?;
                 }
-                Ok(fx_rate_response)
+                Ok(Some(fx_rate_response))
             },
             Err(_) => Err(Error::msg("Error during creating fx_rate"))
         }
@@ -332,12 +355,25 @@ impl CurrencyServiceInterface for CurrencyService {
         }
     }
 
-    async fn list_fx_rates_by_base_code(&self, command: FxRateByBaseCodeCommand) -> Result<Vec<FxRateResponse>, Error> {
-        let fx_rates = self.fx_rate_repo.get_by_base_code(command.fx_rate_base_code, Some(command.auth_user.user_id)).await;
+    async fn list_fx_rates_by_base_code(&self, command: FxRateByBaseCodeCommand) -> Result<Option<Vec<FxRateResponse>>, Error> {
+        let meta_user = command.auth_user.user_id.clone();
+        
+        let fx_rate_base_code = command.fx_rate_base_code.clone();
+        let currency_base_code = self.currency_repo.get(fx_rate_base_code, Some(meta_user.clone())).await;
+        match currency_base_code {
+            Ok(currency) => {
+                if currency.is_none() {
+                    return Ok(None);
+                }
+            },
+            Err(_) => return Err(Error::msg("Error during getting currency base code"))
+        }
+        
+        let fx_rates = self.fx_rate_repo.get_by_base_code(command.fx_rate_base_code, Some(meta_user)).await;
         match fx_rates { 
             Ok(fx_rates) => {
                 let fx_rates_response = fx_rates.into_iter().map(FxRateResponse::from).collect();
-                Ok(fx_rates_response)
+                Ok(Some(fx_rates_response))
             },
             Err(_) => Err(Error::msg("Error getting fx rates"))
         }

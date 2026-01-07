@@ -117,8 +117,8 @@ pub struct FxRateByBaseCodeCommand {
 }
 
 impl FxRateByBaseCodeCommand {
-    pub fn new(fx_rate_base_code: String, pagination: PaginationRequest, auth_user: AuthUser) -> Self {
-        Self { fx_rate_base_code, pagination: Some(pagination), auth_user }
+    pub fn new(fx_rate_base_code: String, pagination: Option<PaginationRequest>, auth_user: AuthUser) -> Self {
+        Self { fx_rate_base_code, pagination, auth_user }
     }
 }
 
