@@ -23,6 +23,7 @@ pub enum AppError {
 #[derive(Serialize)]
 struct ErrorBody {
     error: String,
+    detail: Option<String>
 }
 
 impl IntoResponse for AppError {
@@ -35,6 +36,12 @@ impl IntoResponse for AppError {
             AppError::Db(_) => (StatusCode::INTERNAL_SERVER_ERROR, "db error".to_string()),
             AppError::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal error".to_string()),
         };
-        (status, Json(ErrorBody { error: msg })).into_response()
+
+        let detail = match &self {
+            AppError::BadRequest(s) => Some(s.clone()),
+            _ => None,
+        };
+
+        (status, Json(ErrorBody { error: msg, detail })).into_response()
     }
 }

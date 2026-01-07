@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use anyhow::{Error, Result};
 use async_trait::async_trait;
+use rust_decimal::Decimal;
 use sqlx::{
     mysql::MySqlRow, Column, MySqlPool, Row, MySql, Pool,
     types::{
@@ -10,7 +11,8 @@ use sqlx::{
     }
 };
 use tracing::info;
-use crate::config::AppDatabaseMySQLConfig;
+
+use crate::shared::config::AppDatabaseMySQLConfig;
 use crate::shared::log::TimePrinter;
 
 
@@ -202,6 +204,9 @@ pub enum MySqlParam {
     // ----- UUID (BINARY(16) / CHAR(36)) -----
     Uuid(Uuid),
     OptUuid(Option<Uuid>),
+    
+    Decimal(Decimal),
+    OptDecimal(Option<Decimal>),
 }
 
 impl MySqlParam {
@@ -252,6 +257,9 @@ impl MySqlParam {
             // ---- uuid ----
             MySqlParam::Uuid(v) => query.bind(v),
             MySqlParam::OptUuid(v) => query.bind(v),
+            
+            MySqlParam::Decimal(v) => query.bind(v),
+            MySqlParam::OptDecimal(v) => query.bind(v),
         }
     }
 }
@@ -469,3 +477,15 @@ impl From<Option<Uuid>> for MySqlParam {
     }
 }
 
+
+impl From<Decimal> for MySqlParam {
+    fn from(v: Decimal) -> Self {
+        MySqlParam::Decimal(v)
+    }
+}
+
+impl From<Option<Decimal>> for MySqlParam {
+    fn from(v: Option<Decimal>) -> Self {
+        MySqlParam::OptDecimal(v)
+    }
+}

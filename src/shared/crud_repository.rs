@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use anyhow::{Error, Result};
 use sqlx::mysql::MySqlRow;
 
-use crate::db::mysql::{FromSqlRow, GenericRepository, MySqlParam};
+use crate::shared::db::mysql::{FromSqlRow, GenericRepository, MySqlParam};
 use crate::shared::log::TimePrinter;
 
 #[async_trait]

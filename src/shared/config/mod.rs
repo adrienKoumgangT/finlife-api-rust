@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfigJWT {
-    pub private_secret_pem_path: Option<String>,
+    pub private_secret_pem_path: String,
     pub public_secret_pem_path: String, // HS256 secret
     pub issuer: String, // "camer-auth"
     pub audience: String, // "all-services" or service name
@@ -58,6 +58,14 @@ pub struct AppDatabaseConfig {
     pub neo4j: Option<AppDatabaseNeo4jConfig>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppEmailSmtp {
+    pub host: String,
+    pub username: String,
+    pub password: String,
+    pub from_email: String,
+    pub from_name: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -68,6 +76,8 @@ pub struct AppConfig {
     pub jwt: AppConfigJWT,
 
     pub database: AppDatabaseConfig,
+
+    pub email_smtp: AppEmailSmtp,
 
     pub bind_addr: String,
     pub metrics_addr: String,
@@ -90,7 +100,7 @@ impl AppConfig {
 
         let log_level = get_env("LOG_LEVEL").ok().unwrap_or_else(|| "info".to_string());
 
-        let jwt_private_secret_pem_path = get_env("JWT_RSA_PRIVATE_KEY_PATH").ok();
+        let jwt_private_secret_pem_path = get_env("JWT_RSA_PRIVATE_KEY_PATH")?;
         let jwt_public_secret_pem_path = get_env("JWT_RSA_PUBLIC_KEY_PATH")?;
         let jwt_issuer = get_env("JWT_ISSUER")?;
         let jwt_audience = get_env("JWT_AUDIENCE")?;
@@ -184,6 +194,20 @@ impl AppConfig {
             neo4j,
         };
 
+        let smtp_host = get_env("SMTP_HOST")?;
+        let smtp_username = get_env("SMTP_USERNAME")?;
+        let smtp_password = get_env("SMTP_PASSWORD")?;
+        let smtp_from_email = get_env("SMTP_FROM_EMAIL")?;
+        let smtp_from_name = get_env("SMTP_FROM_NAME")?;
+
+        let email_smtp = AppEmailSmtp {
+            host: smtp_host,
+            username: smtp_username,
+            password: smtp_password,
+            from_email: smtp_from_email,
+            from_name: smtp_from_name,
+        };
+
         Ok(AppConfig {
             is_prod,
 
@@ -192,6 +216,8 @@ impl AppConfig {
             jwt,
 
             database,
+
+            email_smtp,
 
             bind_addr,
             metrics_addr,

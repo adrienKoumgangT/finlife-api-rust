@@ -3,7 +3,7 @@ use bb8::Pool;
 use bb8_redis::RedisConnectionManager;
 use redis::{AsyncCommands, RedisError};
 use tracing::info;
-use crate::config::AppDatabaseRedisConfig;
+use crate::shared::config::AppDatabaseRedisConfig;
 use crate::shared::log::TimePrinter;
 
 pub type RedisDatabase = Pool<RedisConnectionManager>;
