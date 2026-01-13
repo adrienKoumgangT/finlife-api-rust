@@ -10,6 +10,9 @@ use crate::modules::{
     currencies::{
         currency_controller, currency_dto
     },
+    people::{
+        people_controller, people_dto
+    },
     users::{
         auth::{auth_controller, auth_dto},
         user::{user_controller, user_dto}
@@ -58,6 +61,10 @@ impl Modify for SecurityAddon {
         currency_controller::get_fx_rates_by_base_code,
         currency_controller::get_fx_rates, currency_controller::post_fx_rate,
         currency_controller::get_fx_rate, currency_controller::put_fx_rate, currency_controller::delete_fx_rate,
+    
+        people_controller::get_people, people_controller::post_person, 
+        people_controller::get_person, people_controller::put_person, people_controller::delete_person, 
+        people_controller::put_archived, 
 
         user_controller::get_users, user_controller::post_user,
         user_controller::get_user, user_controller::put_user, user_controller::delete_user,
@@ -70,6 +77,9 @@ impl Modify for SecurityAddon {
             currency_dto::CurrencyResponse, currency_dto::CurrencyCreateRequest, currency_dto::CurrencyUpdateNameRequest,
             
             currency_dto::FxRateResponse, currency_dto::FxRateCreateRequest, currency_dto::FxRateUpdateRateRequest,
+        
+            people_dto::PeopleResponse,
+            people_dto::PeopleCreateRequest, people_dto::PeopleUpdateRequest, people_dto::PeopleUpdateArchivedRequest,
 
             user_dto::UserResponse,
             user_dto::UserCreateRequest, user_dto::UserUpdateNameRequest, user_dto::UserUpdateBaseCurrencyRequest,
