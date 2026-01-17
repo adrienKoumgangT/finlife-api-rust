@@ -2,6 +2,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
+
 use crate::modules::people::people_dto::{PeopleCreateRequest, PeopleUpdateArchivedRequest, PeopleUpdateRequest};
 use crate::shared::auth::jwt::AuthUser;
 use crate::shared::response::PaginationRequest;

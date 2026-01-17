@@ -10,6 +10,9 @@ use crate::modules::{
     currencies::{
         currency_controller, currency_dto
     },
+    locations::{
+        location_controller, location_dto
+    },
     people::{
         people_controller, people_dto
     },
@@ -48,6 +51,7 @@ impl Modify for SecurityAddon {
         (name = "Auth", description = "Authentication API endpoints"),
         (name = "Currency", description = "Currency API endpoints"),
         (name = "FX", description = "FX API endpoints"),
+        (name = "Location", description = "Location API endpoints"),
         (name = "User", description = "User Manager API endpoints"),
     ),
     paths(
@@ -61,6 +65,10 @@ impl Modify for SecurityAddon {
         currency_controller::get_fx_rates_by_base_code,
         currency_controller::get_fx_rates, currency_controller::post_fx_rate,
         currency_controller::get_fx_rate, currency_controller::put_fx_rate, currency_controller::delete_fx_rate,
+    
+        location_controller::get_locations, location_controller::post_location,
+        location_controller::get_location, location_controller::put_location, location_controller::delete_location,
+        location_controller::put_archived,
     
         people_controller::get_people, people_controller::post_person, 
         people_controller::get_person, people_controller::put_person, people_controller::delete_person, 
@@ -77,6 +85,9 @@ impl Modify for SecurityAddon {
             currency_dto::CurrencyResponse, currency_dto::CurrencyCreateRequest, currency_dto::CurrencyUpdateNameRequest,
             
             currency_dto::FxRateResponse, currency_dto::FxRateCreateRequest, currency_dto::FxRateUpdateRateRequest,
+        
+            location_dto::LocationResponse,
+            location_dto::LocationCreateRequest, location_dto::LocationUpdateRequest, location_dto::LocationUpdateArchivedRequest,
         
             people_dto::PeopleResponse,
             people_dto::PeopleCreateRequest, people_dto::PeopleUpdateRequest, people_dto::PeopleUpdateArchivedRequest,

@@ -12,6 +12,7 @@ use crate::modules::people::{
 };
 use crate::shared::db::redis::{delete_key, get_key, set_key};
 use crate::shared::state::AppState;
+use crate::shared::utils::extract_pagination_data;
 
 #[async_trait]
 pub trait PeopleInterface {
@@ -119,13 +120,6 @@ impl PeopleService {
         Ok(())
     }
 
-    async fn delete_cache_by_user(&self, user: &Uuid) -> Result<(), Error> {
-        if let Some(redis_pool) = &self.redis_pool {
-            let _: () = delete_key(&redis_pool, self.form_redis_key_list_by_user(user).as_str()).await?;
-        }
-        Ok(())
-    }
-
     async fn handle_res_opt_person(&self, people: Result<Option<People>, Error>) -> Result<Option<PeopleResponse>, Error> {
         match people {
             Ok(people) => {
@@ -201,38 +195,46 @@ impl PeopleInterface for PeopleService {
     }
 
     async fn get_all(&self, command: PeopleListCommand) -> Result<Vec<PeopleResponse>, Error> {
-        let mut limit: Option<u32> = None;
-        let mut offset: Option<u32> = None;
+        let meta_user = command.auth_user.user_id.clone();
 
-        if let Some(pagination) = command.pagination {
-            limit = pagination.page_size;
-
-            if let (Some(page_size), Some(page)) = (pagination.page_size, pagination.page) {
-                offset = Some(page * page_size);
-            }
-        }
+        let (limit, offset, search) = extract_pagination_data(command.pagination);
         
-        let people = self.people_repo.get_all(limit, offset, Some(command.auth_user.user_id)).await;
+        let people = if search.is_some() {
+            self.people_repo.search(search.unwrap(), limit, offset, Some(meta_user)).await
+        } else {
+            self.people_repo.get_all(limit, offset, Some(meta_user)).await
+        };
         match people {
             Ok(people) => Ok(people.into_iter().map(PeopleResponse::from).collect()),
-            Err(_) => return Err(Error::msg("Error getting people")),
+            Err(_) => Err(Error::msg("Error getting people")),
         }
     }
 
     async fn get_by_user(&self, command: PeopleListByUserCommand) -> Result<Vec<PeopleResponse>, Error> {
-        let people_cache = self.get_cache_people_by_user(&command.user_id).await?;
-        if let Some(people) = people_cache {
-            return Ok(people);
-        }
-        
-        let people = self.people_repo.get_by_user(command.user_id, Some(command.auth_user.user_id)).await;
-        match people {
-            Ok(people) => {
-                let people_response = people.into_iter().map(PeopleResponse::from).collect();
-                self.cache_people_by_user(&command.user_id, &people_response).await?;
-                Ok(people_response)
-            },
-            Err(_) => Err(Error::msg("Error getting people")),
+        if command.pagination.is_some() && command.pagination.as_ref().unwrap().search.is_some() {
+            let people = self.people_repo.search_by_user(command.user_id, command.pagination.as_ref().unwrap().search.clone().unwrap(), Some(command.auth_user.user_id)).await;
+            match people {
+                Ok(people) => {
+                    let people_response = people.into_iter().map(PeopleResponse::from).collect();
+                    Ok(people_response)
+                },
+                Err(_) => Err(Error::msg("Error getting people")),
+            }
+        } else {
+            let people_cache = self.get_cache_people_by_user(&command.user_id).await?;
+            if let Some(people) = people_cache {
+                return Ok(people);
+            }
+
+            let people = self.people_repo.get_by_user(command.user_id, Some(command.auth_user.user_id)).await;
+            match people {
+                Ok(people) => {
+                    let people_response = people.into_iter().map(PeopleResponse::from).collect();
+                    self.cache_people_by_user(&command.user_id, &people_response).await?;
+                    Ok(people_response)
+                },
+                Err(_) => Err(Error::msg("Error getting people")),
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ use sqlx::{mysql::MySqlRow, Error as SqlxError, Row};
 use std::collections::HashMap;
 use rust_decimal::Decimal;
 use utoipa::ToSchema;
+
 use crate::modules::people::people_command::PeopleCreateCommand;
 use crate::shared::db::mysql::FromSqlRow;
 use crate::shared::utils::ub;

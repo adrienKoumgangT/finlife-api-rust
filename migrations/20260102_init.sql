@@ -100,7 +100,7 @@ CREATE TABLE locations (
     city         VARCHAR(80) NULL,
     region       VARCHAR(80) NULL,
     postal_code  VARCHAR(24) NULL,
-    country_code CHAR(2) NULL,          -- IT, FR, CM...
+    country_code VARCHAR(3) NULL,          -- IT, FR, CM...
 
     latitude     DECIMAL(9,6) NULL,
     longitude    DECIMAL(9,6) NULL,

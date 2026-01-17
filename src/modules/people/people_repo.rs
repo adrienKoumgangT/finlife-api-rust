@@ -30,7 +30,7 @@ pub trait PeopleRepositoryInterface {
     
     async fn get_by_user(&self, user_id: Uuid, meta_user: Option<Uuid>) -> Result<Vec<People>, Error>;
     
-    async fn search(&self, query: String, meta_user: Option<Uuid>) -> Result<Vec<People>, Error>;
+    async fn search(&self, query: String,  limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<People>, Error>;
     
     async fn search_by_user(&self, user_id: Uuid, query: String, meta_user: Option<Uuid>) -> Result<Vec<People>, Error>;
     
@@ -141,9 +141,11 @@ impl PeopleRepositoryInterface for PeopleRepository {
         self.call_procedure_for_list("proc_people_by_user", params).await
     }
 
-    async fn search(&self, query: String, meta_user: Option<Uuid>) -> Result<Vec<People>, Error> {
+    async fn search(&self, query: String,  limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<People>, Error> {
         let params = vec![
             MySqlParam::from(query),
+            MySqlParam::from(limit),
+            MySqlParam::from(offset),
             MySqlParam::from(oub(meta_user)),
         ];
 

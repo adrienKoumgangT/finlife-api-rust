@@ -183,7 +183,7 @@ pub async fn put_archived(
         ("people_id", description = "person identifier in uuid")
     ),
     responses(
-        (status = StatusCode::OK, description = "Person deleted", body = PeopleResponse),
+        (status = StatusCode::OK, description = "Person deleted"),
         (status = StatusCode::NOT_FOUND, description = "Person not found"),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal Server Error"),
     ),
