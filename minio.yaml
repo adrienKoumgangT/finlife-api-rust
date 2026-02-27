@@ -1,0 +1,83 @@
+---
+# Ask Kubernetes for 5GB of persistent storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc
+  labels:
+    app: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# Deploy the Minio server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  # 'Recreate' is important for ReadWriteOnce volumes so the old pod
+  # detaches from the volume before the new pod tries to attach.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - minio server /data --console-address ":9001"
+          env:
+            # NOTE: Fine for local dev. In prod, use K8s Secrets!
+            - name: MINIO_ROOT_USER
+              value: "minioadmin"
+            - name: MINIO_ROOT_PASSWORD
+              value: "minioadmin123"
+          ports:
+            - containerPort: 9000
+              name: api
+            - containerPort: 9001
+              name: console
+          volumeMounts:
+            - name: minio-storage
+              mountPath: /data
+      volumes:
+        - name: minio-storage
+          persistentVolumeClaim:
+            claimName: minio-pvc
+
+---
+# Expose Minio inside (and outside) the cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  type: LoadBalancer # Makes it easily accessible on localhost in Docker Desktop
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+  selector:
+    app: minio

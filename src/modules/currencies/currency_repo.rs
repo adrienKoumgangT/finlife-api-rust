@@ -5,28 +5,22 @@ use uuid::Uuid;
 use sqlx::MySqlPool;
 
 use crate::modules::currencies::currency_model::{Currency, FxRate};
-use crate::shared::db::mysql::{GenericRepository, MySqlParam};
-use crate::shared::crud_repository::CrudRepository;
 use crate::shared::state::AppState;
-use crate::shared::utils::{oub, ub};
 
 #[async_trait]
 pub trait CurrencyRepositoryInterface {
 
-    async fn get(&self, code: String, meta_user: Option<Uuid>) -> Result<Option<Currency>, Error>;
+    async fn get(&self, code: String) -> Result<Option<Currency>, Error>;
 
-    async fn create(&self, currency: Currency, meta_user: Option<Uuid>) -> Result<Currency, Error>;
+    async fn create(&self, currency: Currency) -> Result<Currency, Error>;
 
-    async fn update_name(&self, code: String, name: String, meta_user: Option<Uuid>) -> Result<Option<Currency>, Error>;
+    async fn update_name(&self, code: String, name: String) -> Result<Option<Currency>, Error>;
 
-    async fn delete(&self, code: String, meta_user: Option<Uuid>) -> Result<(), Error>;
-    
-    async fn get_all(&self, meta_user: Option<Uuid>) -> Result<Vec<Currency>, Error>;
-    
+    async fn delete(&self, code: String) -> Result<(), Error>;
+
+    async fn get_all(&self) -> Result<Vec<Currency>, Error>;
+
 }
-
-
-
 
 #[derive(Clone)]
 pub struct CurrencyRepository {
@@ -39,81 +33,83 @@ impl From<&AppState> for CurrencyRepository {
     }
 }
 
-impl GenericRepository<Currency> for CurrencyRepository {
-    fn get_pool(&self) -> &MySqlPool {
-        &self.pool
-    }
-}
-
 #[async_trait]
 impl CurrencyRepositoryInterface for CurrencyRepository {
-    async fn get(&self, code: String, meta_user: Option<Uuid>) -> Result<Option<Currency>, Error> {
-        let params = vec![
-            MySqlParam::from(code),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_optional("proc_currency_get_by_code", params).await
+    async fn get(&self, code: String) -> Result<Option<Currency>, Error> {
+        let currency = sqlx::query_as!(
+            Currency,
+            "SELECT code, name, minor_unit FROM currencies WHERE code = ?",
+            code
+        )
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(currency)
     }
 
-    async fn create(&self, currency: Currency, meta_user: Option<Uuid>) -> Result<Currency, Error> {
-        let params = vec![
-            MySqlParam::from(currency.code),
-            MySqlParam::from(currency.name),
-            MySqlParam::from(currency.minor_unit),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_one("proc_currency_insert", params).await
+    async fn create(&self, currency: Currency) -> Result<Currency, Error> {
+        sqlx::query!(
+            "INSERT INTO currencies (code, name, minor_unit) VALUES (?, ?, ?)",
+            currency.code,
+            currency.name,
+            currency.minor_unit
+        )
+            .execute(&self.pool)
+            .await?;
+
+        let result = self.get(currency.code.clone()).await?;
+        result.ok_or_else(|| Error::msg("Currency not found after creation"))
     }
 
-    async fn update_name(&self, code: String, name: String, meta_user: Option<Uuid>) -> Result<Option<Currency>, Error> {
-        let params = vec![
-            MySqlParam::from(code),
-            MySqlParam::from(name),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_optional("proc_currency_update_name", params).await
+    async fn update_name(&self, code: String, name: String) -> Result<Option<Currency>, Error> {
+        sqlx::query!(
+            "UPDATE currencies SET name = ? WHERE code = ?",
+            name,
+            code
+        )
+            .execute(&self.pool)
+            .await?;
+
+        self.get(code).await
     }
 
-    async fn delete(&self, code: String, meta_user: Option<Uuid>) -> Result<(), Error> {
-        let params = vec![
-            MySqlParam::from(code),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure("proc_currency_delete", params).await
+    async fn delete(&self, code: String) -> Result<(), Error> {
+        sqlx::query!("DELETE FROM currencies WHERE code = ?", code)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
     }
 
-    async fn get_all(&self, meta_user: Option<Uuid>) -> Result<Vec<Currency>, Error> {
-        let params = vec![
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_list("proc_currency_list", params).await
+    async fn get_all(&self) -> Result<Vec<Currency>, Error> {
+        let currencies = sqlx::query_as!(
+            Currency,
+            "SELECT code, name, minor_unit FROM currencies"
+        )
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(currencies)
     }
 }
-
 
 
 #[async_trait]
 pub trait FxRateRepositoryInterface {
 
-    async fn get(&self, fx_rate_id: Uuid, meta_user: Option<Uuid>) -> Result<Option<FxRate>, Error>;
+    async fn get(&self, fx_rate_id: Uuid) -> Result<Option<FxRate>, Error>;
 
-    async fn create(&self, fx_rate: FxRate, meta_user: Option<Uuid>) -> Result<FxRate, Error>;
+    async fn create(&self, fx_rate: FxRate) -> Result<FxRate, Error>;
 
-    async fn update(&self, fx_rate_id: Uuid, fx_rate_rate: Decimal, meta_user: Option<Uuid>) -> Result<Option<FxRate>, Error>;
+    async fn update(&self, fx_rate_id: Uuid, fx_rate_rate: Decimal) -> Result<Option<FxRate>, Error>;
 
-    async fn delete(&self, fx_rate_id: Uuid, meta_user: Option<Uuid>) -> Result<(), Error>;
+    async fn delete(&self, fx_rate_id: Uuid) -> Result<(), Error>;
 
-    async fn get_all(&self, meta_user: Option<Uuid>) -> Result<Vec<FxRate>, Error>;
-    
-    async fn get_by_base_code(&self, base_code: String, meta_user: Option<Uuid>) -> Result<Vec<FxRate>, Error>;
+    async fn get_all(&self) -> Result<Vec<FxRate>, Error>;
+
+    async fn get_by_base_code(&self, base_code: String) -> Result<Vec<FxRate>, Error>;
 
 }
-
 
 #[derive(Clone)]
 pub struct FxRateRepository {
@@ -126,69 +122,99 @@ impl From<&AppState> for FxRateRepository {
     }
 }
 
-impl GenericRepository<FxRate> for FxRateRepository {
-    fn get_pool(&self) -> &MySqlPool {
-        &self.pool
-    }
-}
-
 #[async_trait]
 impl FxRateRepositoryInterface for FxRateRepository {
-    async fn get(&self, fx_rate_id: Uuid, meta_user: Option<Uuid>) -> Result<Option<FxRate>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(fx_rate_id)),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_optional("proc_fx_rate_get_by_id", params).await
+    async fn get(&self, fx_rate_id: Uuid) -> Result<Option<FxRate>, Error> {
+        let fx_rate = sqlx::query_as!(
+            FxRate,
+            r#"
+            SELECT
+                id AS "id: _",
+                base_code, quote_code, rate, as_of_date, source, created_at
+            FROM fx_rates
+            WHERE id = ?
+            "#,
+            fx_rate_id
+        )
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(fx_rate)
     }
 
-    async fn create(&self, fx_rate: FxRate, meta_user: Option<Uuid>) -> Result<FxRate, Error> {
-        let params = vec![
-            MySqlParam::from(fx_rate.base_code),
-            MySqlParam::from(fx_rate.quote_code),
-            MySqlParam::from(fx_rate.rate),
-            MySqlParam::from(fx_rate.as_of_date),
-            MySqlParam::from(fx_rate.source),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_one("proc_fx_rate_create", params).await
+    async fn create(&self, fx_rate: FxRate) -> Result<FxRate, Error> {
+        let new_id = Uuid::new_v4();
+
+        sqlx::query!(
+            r#"
+            INSERT INTO fx_rates (id, base_code, quote_code, rate, as_of_date, source)
+            VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+            new_id,
+            fx_rate.base_code,
+            fx_rate.quote_code,
+            fx_rate.rate,
+            fx_rate.as_of_date,
+            fx_rate.source
+        )
+            .execute(&self.pool)
+            .await?;
+
+        let result = self.get(new_id).await?;
+        result.ok_or_else(|| Error::msg("FxRate not found after creation"))
     }
 
-    async fn update(&self, fx_rate_id: Uuid, rate: Decimal, meta_user: Option<Uuid>) -> Result<Option<FxRate>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(fx_rate_id)),
-            MySqlParam::from(rate),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_optional("proc_fx_rate_update_rate", params).await
+    async fn update(&self, fx_rate_id: Uuid, rate: Decimal) -> Result<Option<FxRate>, Error> {
+        sqlx::query!(
+            "UPDATE fx_rates SET rate = ? WHERE id = ?",
+            rate,
+            fx_rate_id
+        )
+            .execute(&self.pool)
+            .await?;
+
+        self.get(fx_rate_id).await
     }
 
-    async fn delete(&self, fx_rate_id: Uuid, meta_user: Option<Uuid>) -> Result<(), Error> {
-        let params = vec![
-            MySqlParam::from(ub(fx_rate_id)),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure("proc_fx_rate_delete", params).await
+    async fn delete(&self, fx_rate_id: Uuid) -> Result<(), Error> {
+        sqlx::query!("DELETE FROM fx_rates WHERE id = ?", fx_rate_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
     }
 
-    async fn get_all(&self, meta_user: Option<Uuid>) -> Result<Vec<FxRate>, Error> {
-        let params = vec![
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_list("proc_fx_rate_list", params).await
+    async fn get_all(&self) -> Result<Vec<FxRate>, Error> {
+        let fx_rates = sqlx::query_as!(
+            FxRate,
+            r#"
+            SELECT
+                id AS "id: _",
+                base_code, quote_code, rate, as_of_date, source, created_at
+            FROM fx_rates
+            "#
+        )
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(fx_rates)
     }
 
-    async fn get_by_base_code(&self, base_code: String, meta_user: Option<Uuid>) -> Result<Vec<FxRate>, Error> {
-        let params = vec![
-            MySqlParam::from(base_code),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn get_by_base_code(&self, base_code: String) -> Result<Vec<FxRate>, Error> {
+        let fx_rates = sqlx::query_as!(
+            FxRate,
+            r#"
+            SELECT
+                id AS "id: _",
+                base_code, quote_code, rate, as_of_date, source, created_at
+            FROM fx_rates
+            WHERE base_code = ?
+            "#,
+            base_code
+        )
+            .fetch_all(&self.pool)
+            .await?;
 
-        self.call_procedure_for_list("proc_fx_rate_by_code", params).await
+        Ok(fx_rates)
     }
 }

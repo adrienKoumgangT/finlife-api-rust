@@ -1,12 +1,10 @@
-use chrono::NaiveDate;
-use rust_decimal::Decimal;
 use uuid::Uuid;
+use rust_decimal::Decimal;
 use serde::{Serialize, Deserialize};
 
-use crate::modules::locations::location_dto::{LocationCreateRequest, LocationUpdateArchivedRequest, LocationUpdateRequest, LocationUpdateNameRequest};
+use crate::modules::locations::location_dto::*;
 use crate::shared::auth::jwt::AuthUser;
 use crate::shared::response::PaginationRequest;
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LocationGetCommand {
@@ -24,16 +22,17 @@ impl LocationGetCommand {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LocationCreateCommand {
     pub user_id: Uuid,
-    pub location_name: String,
 
-    pub location_address: Option<String>,
-    pub location_city: Option<String>,
-    pub location_region: Option<String>,
-    pub location_postal_code: Option<String>,
-    pub location_country_code: Option<String>,
+    pub name: String,
 
-    pub location_latitude: Option<Decimal>,
-    pub location_longitude: Option<Decimal>,
+    pub address: Option<String>,
+    pub city: Option<String>,
+    pub region: Option<String>,
+    pub postal_code: Option<String>,
+    pub country_code: Option<String>,
+
+    pub latitude: Option<Decimal>,
+    pub longitude: Option<Decimal>,
 
     pub auth_user: AuthUser,
 }
@@ -42,32 +41,14 @@ impl LocationCreateCommand {
     pub fn new(request: LocationCreateRequest, auth_user: AuthUser) -> Self {
         Self {
             user_id: auth_user.user_id,
-            location_name: request.location_name,
-            location_address: request.location_address,
-            location_city: request.location_city,
-            location_region: request.location_region,
-            location_postal_code: request.location_postal_code,
-            location_country_code: request.location_country_code,
-            location_latitude: request.location_latitude,
-            location_longitude: request.location_longitude,
-            auth_user
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LocationUpdateNameCommand {
-    pub location_id: Uuid,
-    pub location_name: String,
-
-    pub auth_user: AuthUser,
-}
-
-impl LocationUpdateNameCommand {
-    pub fn new(location_id: Uuid, request: LocationUpdateNameRequest, auth_user: AuthUser) -> Self {
-        Self {
-            location_id,
-            location_name: request.location_name,
+            name: request.name,
+            address: request.address,
+            city: request.city,
+            region: request.region,
+            postal_code: request.postal_code,
+            country_code: request.country_code,
+            latitude: request.latitude,
+            longitude: request.longitude,
             auth_user,
         }
     }
@@ -76,13 +57,12 @@ impl LocationUpdateNameCommand {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LocationUpdateCommand {
     pub location_id: Uuid,
-
-    pub location_address: Option<String>,
-    pub location_city: Option<String>,
-    pub location_region: Option<String>,
-    pub location_postal_code: Option<String>,
-    pub location_country_code: Option<String>,
-
+    pub name: String,
+    pub address: Option<String>,
+    pub city: Option<String>,
+    pub region: Option<String>,
+    pub postal_code: Option<String>,
+    pub country_code: Option<String>,
     pub auth_user: AuthUser,
 }
 
@@ -90,11 +70,12 @@ impl LocationUpdateCommand {
     pub fn new(location_id: Uuid, request: LocationUpdateRequest, auth_user: AuthUser) -> Self {
         Self {
             location_id,
-            location_address: request.location_address,
-            location_city: request.location_city,
-            location_region: request.location_region,
-            location_postal_code: request.location_postal_code,
-            location_country_code: request.location_country_code,
+            name: request.name,
+            address: request.address,
+            city: request.city,
+            region: request.region,
+            postal_code: request.postal_code,
+            country_code: request.country_code,
             auth_user,
         }
     }
@@ -104,18 +85,18 @@ impl LocationUpdateCommand {
 pub struct LocationUpdateLatLongCommand {
     pub location_id: Uuid,
 
-    pub location_latitude: Option<Decimal>,
-    pub location_longitude: Option<Decimal>,
+    pub latitude: Option<Decimal>,
+    pub longitude: Option<Decimal>,
 
     pub auth_user: AuthUser,
 }
 
 impl LocationUpdateLatLongCommand {
-    pub fn new(location_id: Uuid, location_latitude: Option<Decimal>, location_longitude: Option<Decimal>, auth_user: AuthUser) -> Self {
+    pub fn new(location_id: Uuid, request: LocationUpdateLatLongRequest, auth_user: AuthUser) -> Self {
         Self {
             location_id,
-            location_latitude,
-            location_longitude,
+            latitude: request.latitude,
+            longitude: request.longitude,
             auth_user,
         }
     }
@@ -125,7 +106,7 @@ impl LocationUpdateLatLongCommand {
 pub struct LocationArchivedCommand {
     pub location_id: Uuid,
 
-    pub location_archived: bool,
+    pub archived: bool,
 
     pub auth_user: AuthUser,
 }
@@ -134,7 +115,7 @@ impl LocationArchivedCommand {
     pub fn new(location_id: Uuid, request: LocationUpdateArchivedRequest, auth_user: AuthUser) -> Self {
         Self {
             location_id,
-            location_archived: request.location_archived,
+            archived: request.archived,
             auth_user,
         }
     }
@@ -143,29 +124,13 @@ impl LocationArchivedCommand {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LocationDeleteCommand {
     pub location_id: Uuid,
-    
+
     pub auth_user: AuthUser,
 }
 
 impl LocationDeleteCommand {
     pub fn new(location_id: Uuid, auth_user: AuthUser) -> Self {
-        Self {
-            location_id,
-            auth_user,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LocationListCommand {
-    pub pagination: Option<PaginationRequest>,
-
-    pub auth_user: AuthUser,
-}
-
-impl LocationListCommand {
-    pub fn new(pagination: Option<PaginationRequest>, auth_user: AuthUser) -> Self {
-        Self { pagination, auth_user }
+        Self { location_id, auth_user }
     }
 }
 

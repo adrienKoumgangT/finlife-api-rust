@@ -1,4 +1,4 @@
-use axum::{extract::{Path, State}, http::StatusCode, routing::{get, put}, Json, Router};
+use axum::{extract::{Path, State}, http::StatusCode, routing::{get}, Json, Router};
 use axum::extract::Query;
 use uuid::Uuid;
 
@@ -10,7 +10,8 @@ use crate::modules::currencies::{
 use crate::shared::{
     auth::jwt::AuthUser,
     response::PaginationRequest,
-    state::AppState
+    state::AppState,
+    errors::AppError
 };
 
 
@@ -18,7 +19,9 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(get_currencies).post(post_currency).put(put_currency))
         .route("/{currency_code}", get(get_currency).delete(delete_currency))
+
         .route("/{currency_code}/fx/rates", get(get_fx_rates_by_base_code))
+
         .route("/fx/rates", get(get_fx_rates).post(post_fx_rate))
         .route("/fx/rates/{fx_rate_id}", get(get_fx_rate).put(put_fx_rate).delete(delete_fx_rate))
 }
@@ -27,9 +30,7 @@ pub fn routes() -> Router<AppState> {
 #[utoipa::path(
     get,
     path = "/api/services/currencies",
-    params(
-        PaginationRequest
-    ),
+    params(PaginationRequest),
     responses(
         (status = StatusCode::OK, description = "List of currencies", body = Vec<CurrencyResponse>),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal Server Error"),
@@ -40,15 +41,13 @@ pub async fn get_currencies(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Query(pagination): Query<PaginationRequest>,
-) -> Result<Json<Vec<CurrencyResponse>>, StatusCode> {
+) -> Result<Json<Vec<CurrencyResponse>>, AppError> {
     let command = CurrencyListCommand::new(pagination, auth_user);
     let currency_service = CurrencyService::from(&state);
     
-    let currencies = currency_service.list_currencies(command).await;
-    match currencies {
-        Ok(currencies) => Ok(Json(currencies)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    let currencies = currency_service.list_currencies(command).await?;
+
+    Ok(Json(currencies))
 }
 
 
@@ -56,8 +55,7 @@ pub async fn get_currencies(
     post,
     path = "/api/services/currencies",
     responses(
-        (status = StatusCode::OK, description = "Currency successfully created", body = CurrencyResponse),
-        (status = StatusCode::CREATED, description = "Currency not created"),
+        (status = StatusCode::CREATED, description = "Currency not created", body = CurrencyResponse),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal Server Error")
     ),
     tag = "Currency"
@@ -66,15 +64,13 @@ pub async fn post_currency(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Json(currency_create_request): Json<CurrencyCreateRequest>,
-) -> Result<Json<CurrencyResponse>, StatusCode> {
+) -> Result<Json<CurrencyResponse>, AppError> {
     let command = CurrencyCreateCommand::new(currency_create_request, auth_user);
     let currency_service = CurrencyService::from(&state);
     
-    let currency = currency_service.create_currency(command).await;
-    match currency {
-        Ok(currency) => Ok(Json(currency)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    let currency = currency_service.create_currency(command).await?;
+
+    Ok(Json(currency))
 }
 
 
@@ -92,20 +88,14 @@ pub async fn put_currency(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Json(currency_update_request): Json<CurrencyUpdateNameRequest>,
-) -> Result<Json<CurrencyResponse>, StatusCode> {
+) -> Result<Json<CurrencyResponse>, AppError> {
     let command = CurrencyUpdateNameCommand::new(currency_update_request, auth_user);
     let currency_service = CurrencyService::from(&state);
 
-    let currency = currency_service.update_currency_name(command).await;
-    match currency {
-        Ok(currency) => {
-            match currency {
-                Some(currency) => Ok(Json(currency)),
-                None => Err(StatusCode::NOT_FOUND)
-            }
-        },
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    let currency = currency_service.update_currency_name(command).await?
+        .ok_or_else(|| AppError::NotFound("Currency not found".to_string()))?;
+
+    Ok(Json(currency))
 }
 
 
@@ -126,20 +116,14 @@ pub async fn get_currency(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Path(currency_code): Path<String>,
-) -> Result<Json<CurrencyResponse>, StatusCode> {
+) -> Result<Json<CurrencyResponse>, AppError> {
     let command = CurrencyGetCommand::new(currency_code, auth_user);
     let currency_service = CurrencyService::from(&state);
     
-    let currency = currency_service.get_currency(command).await;
-    match currency {
-        Ok(currency) => {
-            match currency {
-                Some(currency) => Ok(Json(currency)),
-                None => Err(StatusCode::NOT_FOUND)
-            }
-        },
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    let currency = currency_service.get_currency(command).await?
+        .ok_or_else(|| AppError::NotFound("Currency not found".to_string()))?;
+
+    Ok(Json(currency))
 }
 
 
@@ -161,15 +145,13 @@ pub async fn delete_currency(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Path(currency_code): Path<String>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, AppError> {
     let command = CurrencyDeleteCommand::new(currency_code, auth_user);
     let currency_service = CurrencyService::from(&state);
     
-    let response = currency_service.delete_currency(command).await;
-    match response {
-        Ok(_) => Ok(StatusCode::OK),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    currency_service.delete_currency(command).await?;
+
+    Ok(StatusCode::OK)
 }
 
 
@@ -186,15 +168,13 @@ pub async fn get_fx_rates(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Query(pagination): Query<PaginationRequest>,
-) -> Result<Json<Vec<FxRateResponse>>, StatusCode> {
+) -> Result<Json<Vec<FxRateResponse>>, AppError> {
     let command = FxRateListCommand::new(Some(pagination), auth_user);
     let currency_service = CurrencyService::from(&state);
 
-    let fx_rates = currency_service.list_fx_rates(command).await;
-    match fx_rates {
-        Ok(fx_rates) => Ok(Json(fx_rates)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    let fx_rates = currency_service.list_fx_rates(command).await?;
+
+    Ok(Json(fx_rates))
 }
 
 
@@ -212,20 +192,14 @@ pub async fn post_fx_rate(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Json(fx_rate_create_request): Json<FxRateCreateRequest>,
-) -> Result<Json<FxRateResponse>, StatusCode> {
+) -> Result<Json<FxRateResponse>, AppError> {
     let command = FxRateCreateCommand::new(fx_rate_create_request, auth_user);
     let currency_service = CurrencyService::from(&state);
 
-    let fx_rate = currency_service.create_fx_rate(command).await;
-    match fx_rate {
-        Ok(fx_rate) => {
-            match fx_rate {
-                Some(fx_rate) => Ok(Json(fx_rate)),
-                None => Err(StatusCode::NOT_FOUND)
-            }
-        },
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    let fx_rate = currency_service.create_fx_rate(command).await?
+        .ok_or_else(|| AppError::NotFound("Currency not found".to_string()))?;
+
+    Ok(Json(fx_rate))
 }
 
 
@@ -244,20 +218,14 @@ pub async fn get_fx_rates_by_base_code(
     auth_user: AuthUser,
     Path(currency_code): Path<String>,
     Query(pagination): Query<PaginationRequest>,
-) -> Result<Json<Vec<FxRateResponse>>, StatusCode> {
+) -> Result<Json<Vec<FxRateResponse>>, AppError> {
     let command = FxRateByBaseCodeCommand::new(currency_code, Some(pagination), auth_user);
     let currency_service = CurrencyService::from(&state);
 
-    let fx_rates = currency_service.list_fx_rates_by_base_code(command).await;
-    match fx_rates {
-        Ok(fx_rates) => {
-            match fx_rates {
-                Some(fx_rate) => Ok(Json(fx_rate)),
-                None => Err(StatusCode::NOT_FOUND)
-            }
-        },
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    let fx_rates = currency_service.list_fx_rates_by_base_code(command).await?
+        .ok_or_else(|| AppError::NotFound("Currency not found".to_string()))?;
+
+    Ok(Json(fx_rates))
 }
 
 
@@ -278,20 +246,14 @@ pub async fn get_fx_rate(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Path(fx_rate_id): Path<Uuid>,
-) -> Result<Json<FxRateResponse>, StatusCode> {
+) -> Result<Json<FxRateResponse>, AppError> {
     let command = FxRateGetCommand::new(fx_rate_id, auth_user);
     let currency_service = CurrencyService::from(&state);
 
-    let fx_rate = currency_service.get_fx_rate(command).await;
-    match fx_rate {
-        Ok(fx_rate) => {
-            match fx_rate {
-                Some(fx_rate) => Ok(Json(fx_rate)),
-                None => Err(StatusCode::NOT_FOUND)
-            }
-        },
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    let fx_rate = currency_service.get_fx_rate(command).await?
+        .ok_or_else(|| AppError::NotFound(format!("Fx Rate {} not found", fx_rate_id)))?;
+
+    Ok(Json(fx_rate))
 }
 
 
@@ -313,20 +275,14 @@ pub async fn put_fx_rate(
     auth_user: AuthUser,
     Path(fx_rate_id): Path<Uuid>,
     Json(fx_rate_update_rate_request): Json<FxRateUpdateRateRequest>
-) -> Result<Json<FxRateResponse>, StatusCode> {
+) -> Result<Json<FxRateResponse>, AppError> {
     let command = FxRateUpdateRateCommand::new(fx_rate_id, fx_rate_update_rate_request, auth_user);
     let currency_service = CurrencyService::from(&state);
 
-    let fx_rate = currency_service.update_fx_rate(command).await;
-    match fx_rate {
-        Ok(fx_rate) => {
-            match fx_rate {
-                Some(fx_rate) => Ok(Json(fx_rate)),
-                None => Err(StatusCode::NOT_FOUND)
-            }
-        },
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    let fx_rate = currency_service.update_fx_rate(command).await?
+        .ok_or_else(|| AppError::NotFound(format!("Fx Rate {} not found", fx_rate_id)))?;
+
+    Ok(Json(fx_rate))
 }
 
 
@@ -347,13 +303,11 @@ pub async fn delete_fx_rate(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Path(fx_rate_id): Path<Uuid>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, AppError> {
     let command = FxRateDeleteCommand::new(fx_rate_id, auth_user);
     let currency_service = CurrencyService::from(&state);
 
-    let response = currency_service.delete_fx_rate(command).await;
-    match response {
-        Ok(_) => Ok(StatusCode::OK),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-    }
+    currency_service.delete_fx_rate(command).await?;
+
+    Ok(StatusCode::OK)
 }

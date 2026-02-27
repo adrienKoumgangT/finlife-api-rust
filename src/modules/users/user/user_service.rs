@@ -1,4 +1,4 @@
-use anyhow::{Error, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use bb8::Pool;
 use bb8_redis::RedisConnectionManager;
@@ -10,30 +10,35 @@ use crate::modules::users::user::{
     user_model::User,
     user_repo::{UserRepository, UserRepositoryInterface}
 };
-use crate::shared::auth::password::verify_password;
-use crate::shared::db::redis::{delete_key, get_key, set_key};
-use crate::shared::state::AppState;
+use crate::shared::{
+    db::redis::{delete_key, get_key, set_key},
+    errors::AppError,
+    state::AppState,
+};
 
 
 #[async_trait]
 pub trait UserServiceInterface {
+    
+    async fn get(&self, command: UserGetCommand) -> Result<Option<UserResponse>, AppError>;
+    
+    async fn get_by_email(&self, command: UserGetByEmailCommand) -> Result<Option<UserResponse>, AppError>;
+    
+    async fn create(&self, command: UserCreateCommand) -> Result<UserResponse, AppError>;
 
-    async fn get(&self, command: UserGetCommand) -> Result<Option<UserResponse>, Error>;
-
-    async fn create(&self, command: UserCreateCommand) -> Result<UserResponse, Error>;
-
-    async fn update_password(&self, command: UserUpdatePasswordCommand) -> Result<Option<UserResponse>, Error>;
-
-    async fn update_name(&self, command: UserUpdateNameCommand) -> Result<Option<UserResponse>, Error>;
-
-    async fn update_base_currency(&self, command: UserUpdateBaseCurrencyCommand) -> Result<Option<UserResponse>, Error>;
-
-    async fn delete(&self, command: UserDeleteCommand) -> Result<(), Error>;
-
-    async fn list(&self, command: UserListCommand) -> Result<Vec<UserResponse>, Error>;
-
+    async fn verify_email(&self, command: UserVerifyEmailCommand) -> Result<bool, AppError>;
+    
+    async fn update_password(&self, command: UserUpdatePasswordCommand) -> Result<bool, AppError>;
+    
+    async fn update_name(&self, command: UserUpdateNameCommand) -> Result<Option<UserResponse>, AppError>;
+    
+    async fn update_base_currency(&self, command: UserUpdateBaseCurrencyCommand) -> Result<Option<UserResponse>, AppError>;
+    
+    async fn delete(&self, command: UserDeleteCommand) -> Result<(), AppError>;
+    
+    async fn list(&self, command: UserListCommand) -> Result<Vec<UserResponse>, AppError>;
+    
 }
-
 
 #[derive(Clone)]
 pub struct UserService {
@@ -58,170 +63,147 @@ impl UserService {
     }
 }
 
-
 #[async_trait]
 impl UserServiceInterface for UserService {
-    async fn get(&self, command: UserGetCommand) -> Result<Option<UserResponse>, Error> {
+
+    async fn get(&self, command: UserGetCommand) -> Result<Option<UserResponse>, AppError> {
         if let Some(redis_pool) = &self.redis_pool {
             let user_cache: Option<UserResponse> = get_key(
                 &redis_pool,
                 self.form_redis_key_single(&command.user_id).as_str()
-            ).await?;
+            ).await.map_err(|e| AppError::InternalError(format!("Redis error: {}", e)))?;
+
             if let Some(user) = user_cache {
                 return Ok(Some(user));
             }
         }
 
-        let user = self.user_repo.get(command.user_id, Some(command.auth_user.user_id)).await;
-        match user {
-            Ok(user) => {
-                match user {
-                    Some(user) => {
-                        let user_response = UserResponse::from(user);
-                        if let Some(redis_pool) = &self.redis_pool {
-                            let _: () = set_key(
-                                &redis_pool,
-                                self.form_redis_key_single(&user_response.user_id).as_str(),
-                                &user_response,
-                                self.redis_key_single_ttl()
-                            ).await?;
-                        }
-                        Ok(Some(user_response))
-                    },
-                    None => Ok(None)
-                }
-            },
-            Err(_) => Err(Error::msg("Error during getting user"))
+        let user = self.user_repo.get(command.user_id).await?;
+
+        if let Some(user) = user {
+            let user_response = UserResponse::from(user);
+            if let Some(redis_pool) = &self.redis_pool {
+                let _: () = set_key(
+                    &redis_pool,
+                    self.form_redis_key_single(&user_response.user_id).as_str(),
+                    &user_response,
+                    self.redis_key_single_ttl()
+                ).await.map_err(AppError::Internal)?;
+            }
+            Ok(Some(user_response))
+        } else {
+            Ok(None)
         }
     }
 
-    async fn create(&self, command: UserCreateCommand) -> Result<UserResponse, Error> {
-        let meta_user = command.auth_user.user_id.clone();
+    async fn get_by_email(&self, command: UserGetByEmailCommand) -> Result<Option<UserResponse>, AppError> {
+        let user = self.user_repo.get_by_email(command.user_email).await?;
+
+        if let Some(user) = user {
+            Ok(Some(UserResponse::from(user)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn create(&self, command: UserCreateCommand) -> Result<UserResponse, AppError> {
         let user_create = User::from(command);
 
-        let user = self.user_repo.create(user_create, Some(meta_user)).await;
-        match user {
-            Ok(user) => {
-                let user_response = UserResponse::from(user);
-                if let Some(redis_pool) = &self.redis_pool {
-                    let _: () = set_key(
-                        &redis_pool,
-                        self.form_redis_key_single(&user_response.user_id).as_str(),
-                        &user_response,
-                        self.redis_key_single_ttl()
-                    ).await?;
-                }
-                Ok(user_response)
-            },
-            Err(_) => Err(Error::msg("Error during creating user"))
-        }
-    }
+        let user = self.user_repo.create(user_create).await?;
 
-    async fn update_password(&self, command: UserUpdatePasswordCommand) -> Result<Option<UserResponse>, Error> {
-        let old_user = self.user_repo.get(command.user_id, Some(command.auth_user.user_id)).await;
-        match old_user {
-            Ok(old_user) => {
-                match old_user {
-                    Some(old_user) => {
-                        let valid_password = verify_password(command.user_old_password.as_str(), old_user.password_hash.as_str());
-                        match valid_password {
-                            Ok(valid_password) => {
-                                if !valid_password {
-                                    return Err(Error::msg("Password don't match"));
-                                }
-
-                                let user = self.user_repo.update_password(command.user_id, command.user_new_password, Some(command.auth_user.user_id)).await;
-                                match user {
-                                    Ok(user) => {
-                                        match user {
-                                            Some(user) => {
-                                                let user_response = UserResponse::from(user);
-                                                if let Some(redis_pool) = &self.redis_pool {
-                                                    let _: () = set_key(
-                                                        &redis_pool,
-                                                        self.form_redis_key_single(&user_response.user_id).as_str(),
-                                                        &user_response,
-                                                        self.redis_key_single_ttl()
-                                                    ).await?;
-                                                }
-                                                Ok(Some(user_response))
-                                            },
-                                            None => Ok(None)
-                                        }
-                                    },
-                                    Err(_) => Err(Error::msg("Error during updating user"))
-                                }
-                            },
-                            Err(_) => Err(Error::msg("Invalid password"))
-                        }
-                    },
-                    None => Ok(None)
-                }
-            },
-            Err(_) => Err(Error::msg("Error during updating user password"))
-        }
-    }
-
-    async fn update_name(&self, command: UserUpdateNameCommand) -> Result<Option<UserResponse>, Error> {
-        let user = self.user_repo.update_name(command.user_id, command.user_first_name, command.user_last_name, Some(command.auth_user.user_id)).await;
-        match user {
-            Ok(user) => {
-                match user {
-                    Some(user) => {
-                        let user_response = UserResponse::from(user);
-                        if let Some(redis_pool) = &self.redis_pool {
-                            let _: () = set_key(
-                                &redis_pool,
-                                self.form_redis_key_single(&user_response.user_id).as_str(),
-                                &user_response,
-                                self.redis_key_single_ttl()
-                            ).await?;
-                        }
-                        Ok(Some(user_response))
-                    },
-                    None => Ok(None)
-                }
-            },
-            Err(_) => Err(Error::msg("Error during updating user name"))
-        }
-    }
-
-    async fn update_base_currency(&self, command: UserUpdateBaseCurrencyCommand) -> Result<Option<UserResponse>, Error> {
-        let user = self.user_repo.update_base_currency(command.user_id, command.user_base_currency_code, Some(command.auth_user.user_id)).await;
-        match user {
-            Ok(user) => {
-                match user {
-                    Some(user) => {
-                        let user_response = UserResponse::from(user);
-                        if let Some(redis_pool) = &self.redis_pool {
-                            let _: () = set_key(
-                                &redis_pool,
-                                self.form_redis_key_single(&user_response.user_id).as_str(),
-                                &user_response,
-                                self.redis_key_single_ttl()
-                            ).await?;
-                        }
-                        Ok(Some(user_response))
-                    },
-                    None => Ok(None)
-                }
-            },
-            Err(_) => Err(Error::msg("Error during updating user base currency"))
-        }
-    }
-
-    async fn delete(&self, command: UserDeleteCommand) -> Result<(), Error> {
-        let result = self.user_repo.delete(command.user_id, Some(command.auth_user.user_id)).await;
+        let user_response = UserResponse::from(user);
         if let Some(redis_pool) = &self.redis_pool {
-            let _: () = delete_key(&redis_pool, self.form_redis_key_single(&command.user_id).as_str()).await?;
+            let _: () = set_key(
+                &redis_pool,
+                self.form_redis_key_single(&user_response.user_id).as_str(),
+                &user_response,
+                self.redis_key_single_ttl()
+            ).await.map_err(AppError::Internal)?;
         }
-        match result {
-            Ok(_) => Ok(()),
-            Err(_) => Err(Error::msg("Error during deleting user"))
+
+        Ok(user_response)
+    }
+
+    async fn verify_email(&self, command: UserVerifyEmailCommand) -> Result<bool, AppError> {
+        let result = self.user_repo.verify_email(command.user_id).await?;
+
+        if let Some(redis_pool) = &self.redis_pool {
+            let _: () = delete_key(&redis_pool, self.form_redis_key_single(&command.user_id).as_str()).await
+                .map_err(AppError::Internal)?;
+        }
+
+        Ok(result)
+    }
+
+    async fn update_password(&self, command: UserUpdatePasswordCommand) -> Result<bool, AppError> {
+        let user = self.user_repo.update_password(command.user_id, command.new_password).await?;
+
+        if let Some(user) = user {
+            let user_response = UserResponse::from(user);
+            if let Some(redis_pool) = &self.redis_pool {
+                let _: () = set_key(
+                    &redis_pool,
+                    self.form_redis_key_single(&user_response.user_id).as_str(),
+                    &user_response,
+                    self.redis_key_single_ttl()
+                ).await.map_err(AppError::Internal)?;
+            }
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 
-    async fn list(&self, command: UserListCommand) -> Result<Vec<UserResponse>, Error> {
+    async fn update_name(&self, command: UserUpdateNameCommand) -> Result<Option<UserResponse>, AppError> {
+        let user = self.user_repo.update_name(command.user_id, command.first_name, command.last_name).await?;
+
+        if let Some(user) = user {
+            let user_response = UserResponse::from(user);
+            if let Some(redis_pool) = &self.redis_pool {
+                let _: () = set_key(
+                    &redis_pool,
+                    self.form_redis_key_single(&user_response.user_id).as_str(),
+                    &user_response,
+                    self.redis_key_single_ttl()
+                ).await.map_err(AppError::Internal)?;
+            }
+            Ok(Some(user_response))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn update_base_currency(&self, command: UserUpdateBaseCurrencyCommand) -> Result<Option<UserResponse>, AppError> {
+        let user = self.user_repo.update_base_currency(command.user_id, command.base_currency_code).await?;
+
+        if let Some(user) = user {
+            let user_response = UserResponse::from(user);
+            if let Some(redis_pool) = &self.redis_pool {
+                let _: () = set_key(
+                    &redis_pool,
+                    self.form_redis_key_single(&user_response.user_id).as_str(),
+                    &user_response,
+                    self.redis_key_single_ttl()
+                ).await.map_err(AppError::Internal)?;
+            }
+            Ok(Some(user_response))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn delete(&self, command: UserDeleteCommand) -> Result<(), AppError> {
+        self.user_repo.delete(command.user_id).await?;
+
+        if let Some(redis_pool) = &self.redis_pool {
+            let _: () = delete_key(&redis_pool, self.form_redis_key_single(&command.user_id).as_str()).await
+                .map_err(AppError::Internal)?;
+        }
+
+        Ok(())
+    }
+
+    async fn list(&self, command: UserListCommand) -> Result<Vec<UserResponse>, AppError> {
         let mut limit: Option<u32> = None;
         let mut offset: Option<u32> = None;
 
@@ -233,10 +215,7 @@ impl UserServiceInterface for UserService {
             }
         }
 
-        let users = self.user_repo.get_all(limit, offset, Some(command.auth_user.user_id)).await;
-        match users {
-            Ok(users) => Ok(users.into_iter().map(UserResponse::from).collect()),
-            Err(_) => Err(Error::msg("Error getting users"))
-        }
+        let users = self.user_repo.get_all(limit, offset).await?;
+        Ok(users.into_iter().map(UserResponse::from).collect())
     }
 }

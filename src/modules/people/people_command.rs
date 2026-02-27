@@ -1,5 +1,3 @@
-use chrono::NaiveDate;
-use rust_decimal::Decimal;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 
@@ -24,12 +22,12 @@ impl PeopleGetCommand {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PeopleCreateCommand {
     pub user_id: Uuid,
-    pub people_name: String,
+    pub name: String,
 
-    pub people_email: Option<String>,
-    pub people_phone: Option<String>,
-    pub people_image_url: Option<String>,
-    pub people_note: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub image_url: Option<String>,
+    pub note: Option<String>,
 
     pub auth_user: AuthUser,
 }
@@ -38,11 +36,11 @@ impl PeopleCreateCommand {
     pub fn new(request: PeopleCreateRequest, auth_user: AuthUser) -> Self {
         Self {
             user_id: auth_user.user_id,
-            people_name: request.people_name,
-            people_email: request.people_email,
-            people_phone: request.people_phone,
-            people_image_url: request.people_image_url,
-            people_note: request.people_note,
+            name: request.name,
+            email: request.email,
+            phone: request.phone,
+            image_url: request.image_url,
+            note: request.note,
             auth_user,
         }
     }
@@ -51,7 +49,7 @@ impl PeopleCreateCommand {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PeopleUpdateImageCommand {
     pub people_id: Uuid,
-    pub people_image_url: Option<String>,
+    pub image_url: Option<String>,
 
     pub auth_user: AuthUser,
 }
@@ -59,7 +57,7 @@ pub struct PeopleUpdateImageCommand {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PeopleArchivedCommand {
     pub people_id: Uuid,
-    pub people_archived: bool,
+    pub archived: bool,
 
     pub auth_user: AuthUser,
 }
@@ -68,7 +66,7 @@ impl PeopleArchivedCommand {
     pub fn new(people_id: Uuid, request: PeopleUpdateArchivedRequest, auth_user: AuthUser) -> Self {
         Self {
             people_id,
-            people_archived: request.people_archived,
+            archived: request.archived,
             auth_user,
         }
     }
@@ -78,11 +76,11 @@ impl PeopleArchivedCommand {
 pub struct PeopleUpdateCommand {
     pub people_id: Uuid,
     
-    pub people_name: String,
+    pub name: String,
 
-    pub people_email: Option<String>,
-    pub people_phone: Option<String>,
-    pub people_note: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub note: Option<String>,
 
     pub auth_user: AuthUser,
 }
@@ -91,10 +89,10 @@ impl PeopleUpdateCommand {
     pub fn new(people_id: Uuid, request: PeopleUpdateRequest, auth_user: AuthUser) -> Self {
         Self {
             people_id,
-            people_name: request.people_name,
-            people_email: request.people_email,
-            people_phone: request.people_phone,
-            people_note: request.people_note,
+            name: request.name,
+            email: request.email,
+            phone: request.phone,
+            note: request.note,
             auth_user,
         }
     }

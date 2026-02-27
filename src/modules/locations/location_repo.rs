@@ -5,36 +5,26 @@ use uuid::Uuid;
 use sqlx::MySqlPool;
 
 use crate::modules::locations::location_model::Location;
-use crate::shared::db::mysql::{GenericRepository, MySqlParam};
-use crate::shared::crud_repository::CrudRepository;
 use crate::shared::state::AppState;
-use crate::shared::utils::{oub, ub};
-
 
 #[async_trait]
 pub trait LocationRepositoryInterface {
 
-    async fn get(&self, location_id: Uuid, meta_user: Option<Uuid>) -> Result<Option<Location>, Error>;
+    async fn get(&self, location_id: Uuid, user_id: Option<Uuid>) -> Result<Option<Location>, Error>;
 
-    async fn create(&self, location: Location, meta_user: Option<Uuid>) -> Result<Location, Error>;
+    async fn create(&self, location: Location, user_id: Option<Uuid>) -> Result<Location, Error>;
+    
+    async fn update(&self, location_id: Uuid, name: String, address: Option<String>, city: Option<String>, region: Option<String>, postal_code: Option<String>, country_code: Option<String>, user_id: Option<Uuid>) -> Result<Option<Location>, Error>;
 
-    async fn update_name(&self, location_id: Uuid, name: String, meta_user: Option<Uuid>) -> Result<Option<Location>, Error>;
+    async fn update_lat_long(&self, location_id: Uuid, latitude: Option<Decimal>, longitude: Option<Decimal>, user_id: Option<Uuid>) -> Result<Option<Location>, Error>;
 
-    async fn update(&self, location_id: Uuid, address: Option<String>, city: Option<String>, region: Option<String>, postal_code: Option<String>, country_code: Option<String>, meta_user: Option<Uuid>) -> Result<Option<Location>, Error>;
+    async fn archived(&self, location_id: Uuid, archived: bool, user_id: Option<Uuid>) -> Result<Option<Location>, Error>;
 
-    async fn update_lat_long(&self, location_id: Uuid, latitude: Option<Decimal>, longitude: Option<Decimal>, meta_user: Option<Uuid>) -> Result<Option<Location>, Error>;
+    async fn delete(&self, location_id: Uuid, user_id: Option<Uuid>) -> Result<(), Error>;
 
-    async fn archived(&self, location_id: Uuid, archived: bool, meta_user: Option<Uuid>) -> Result<Option<Location>, Error>;
+    async fn search_by_user(&self, user_id: Uuid, query: String, limit: Option<u32>, offset: Option<u32>) -> Result<Vec<Location>, Error>;
 
-    async fn delete(&self, location_id: Uuid, meta_user: Option<Uuid>) -> Result<(), Error>;
-
-    async fn get_all(&self, limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<Location>, Error>;
-
-    async fn get_by_user(&self, user_id: Uuid, meta_user: Option<Uuid>) -> Result<Vec<Location>, Error>;
-
-    async fn search(&self, query: String, limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<Location>, Error>;
-
-    async fn search_by_user(&self, user_id: Uuid, query: String, meta_user: Option<Uuid>) -> Result<Vec<Location>, Error>;
+    async fn get_by_user(&self, user_id: Uuid, limit: Option<u32>, offset: Option<u32>) -> Result<Vec<Location>, Error>;
 
 }
 
@@ -49,132 +39,158 @@ impl From<&AppState> for LocationRepository {
     }
 }
 
-impl GenericRepository<Location> for LocationRepository {
-    fn get_pool(&self) -> &MySqlPool {
-        &self.pool
-    }
-}
-
 #[async_trait]
 impl LocationRepositoryInterface for LocationRepository {
-    async fn get(&self, location_id: Uuid, meta_user: Option<Uuid>) -> Result<Option<Location>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(location_id)),
-            MySqlParam::from(oub(meta_user)),
-        ];
 
-        self.call_procedure_for_optional("proc_location_get_by_id", params).await
+    async fn get(&self, location_id: Uuid, user_id: Option<Uuid>) -> Result<Option<Location>, Error> {
+        let location = sqlx::query_as!(
+            Location,
+            r#"
+            SELECT
+                id AS "id: _", user_id AS "user_id: _",
+                name, address, city, region, postal_code, country_code,
+                latitude, longitude,
+                archived AS "archived: bool",
+                created_at, updated_at
+            FROM locations
+            WHERE id = ? AND user_id = ?
+            "#,
+            location_id,
+            user_id
+        )
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(location)
     }
 
-    async fn create(&self, location: Location, meta_user: Option<Uuid>) -> Result<Location, Error> {
-        let params = vec![
-            MySqlParam::from(location.user_id),
-            MySqlParam::from(location.name),
-            MySqlParam::from(location.address),
-            MySqlParam::from(location.city),
-            MySqlParam::from(location.region),
-            MySqlParam::from(location.postal_code),
-            MySqlParam::from(location.country_code),
-            MySqlParam::from(location.latitude),
-            MySqlParam::from(location.longitude),
-            MySqlParam::from(location.archived),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn create(&self, location: Location, user_id: Option<Uuid>) -> Result<Location, Error> {
+        let new_id = Uuid::new_v4();
 
-        self.call_procedure_for_one("proc_location_create", params).await
+        sqlx::query!(
+            r#"
+            INSERT INTO locations
+                (id, user_id, name, address, city, region, postal_code, country_code, latitude, longitude, archived)
+            VALUES
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+            new_id,
+            location.user_id,
+            location.name,
+            location.address,
+            location.city,
+            location.region,
+            location.postal_code,
+            location.country_code,
+            location.latitude,
+            location.longitude,
+            location.archived
+        )
+            .execute(&self.pool)
+            .await?;
+
+        let result = self.get(new_id, user_id).await?;
+        result.ok_or_else(|| Error::msg("Location not found after creation"))
     }
 
-    async fn update_name(&self, location_id: Uuid, name: String, meta_user: Option<Uuid>) -> Result<Option<Location>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(location_id)),
-            MySqlParam::from(name),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn update(&self, location_id: Uuid, name: String, address: Option<String>, city: Option<String>, region: Option<String>, postal_code: Option<String>, country_code: Option<String>, user_id: Option<Uuid>) -> Result<Option<Location>, Error> {
+        sqlx::query!(
+            "UPDATE locations SET name = ?, address = ?, city = ?, region = ?, postal_code = ?, country_code = ? WHERE id = ? AND user_id = ?",
+            name, address, city, region, postal_code, country_code, location_id, user_id
+        )
+            .execute(&self.pool)
+            .await?;
 
-        self.call_procedure_for_optional("proc_location_update_name", params).await
+        self.get(location_id, user_id).await
     }
 
-    async fn update(&self, location_id: Uuid, address: Option<String>, city: Option<String>, region: Option<String>, postal_code: Option<String>, country_code: Option<String>, meta_user: Option<Uuid>) -> Result<Option<Location>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(location_id)),
-            MySqlParam::from(address),
-            MySqlParam::from(city),
-            MySqlParam::from(region),
-            MySqlParam::from(postal_code),
-            MySqlParam::from(country_code),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn update_lat_long(&self, location_id: Uuid, latitude: Option<Decimal>, longitude: Option<Decimal>, user_id: Option<Uuid>) -> Result<Option<Location>, Error> {
+        sqlx::query!(
+            "UPDATE locations SET latitude = ?, longitude = ? WHERE id = ? AND user_id = ?",
+            latitude, longitude, location_id, user_id
+        )
+            .execute(&self.pool)
+            .await?;
 
-        self.call_procedure_for_optional("proc_location_update", params).await
+        self.get(location_id, user_id).await
     }
 
-    async fn update_lat_long(&self, location_id: Uuid, latitude: Option<Decimal>, longitude: Option<Decimal>, meta_user: Option<Uuid>) -> Result<Option<Location>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(location_id)),
-            MySqlParam::from(latitude),
-            MySqlParam::from(longitude),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn archived(&self, location_id: Uuid, archived: bool, user_id: Option<Uuid>) -> Result<Option<Location>, Error> {
+        sqlx::query!(
+            "UPDATE locations SET archived = ? WHERE id = ? AND user_id = ?",
+            archived,
+            location_id,
+            user_id
+        )
+            .execute(&self.pool)
+            .await?;
 
-        self.call_procedure_for_optional("proc_location_update_lat_long", params).await
+        self.get(location_id, user_id).await
     }
 
-    async fn archived(&self, location_id: Uuid, archived: bool, meta_user: Option<Uuid>) -> Result<Option<Location>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(location_id)),
-            MySqlParam::from(archived),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn delete(&self, location_id: Uuid, user_id: Option<Uuid>) -> Result<(), Error> {
+        sqlx::query!("DELETE FROM locations WHERE id = ? AND user_id = ?", location_id, user_id)
+            .execute(&self.pool)
+            .await?;
 
-        self.call_procedure_for_optional("proc_location_update_archived", params).await
+        Ok(())
     }
 
-    async fn delete(&self, location_id: Uuid, meta_user: Option<Uuid>) -> Result<(), Error> {
-        let params = vec![
-            MySqlParam::from(ub(location_id)),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn search_by_user(&self, user_id: Uuid, query: String, limit: Option<u32>, offset: Option<u32>) -> Result<Vec<Location>, Error> {
+        let limit_val = limit.unwrap_or(100) as i64;
+        let offset_val = offset.unwrap_or(0) as i64;
+        let search_term = format!("%{}%", query);
 
-        self.call_procedure("proc_location_delete", params).await
+        let locations = sqlx::query_as!(
+            Location,
+            r#"
+            SELECT
+                id AS "id: _", user_id AS "user_id: _",
+                name, address, city, region, postal_code, country_code,
+                latitude, longitude,
+                archived AS "archived: bool",
+                created_at, updated_at
+            FROM locations
+            WHERE user_id = ? AND (name LIKE ? OR address LIKE ? OR city LIKE ?)
+            LIMIT ? OFFSET ?
+            "#,
+            user_id,
+            search_term,
+            search_term,
+            search_term,
+            limit_val,
+            offset_val
+        )
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(locations)
     }
 
-    async fn get_all(&self, limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<Location>, Error> {
-        let params = vec![
-            MySqlParam::from(limit),
-            MySqlParam::from(offset),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn get_by_user(&self, user_id: Uuid, limit: Option<u32>, offset: Option<u32>) -> Result<Vec<Location>, Error> {
+        let limit_val = limit.unwrap_or(100) as i64;
+        let offset_val = offset.unwrap_or(0) as i64;
 
-        self.call_procedure_for_list("proc_location_list", params).await
-    }
+        let locations = sqlx::query_as!(
+            Location,
+            r#"
+            SELECT
+                id AS "id: _", user_id AS "user_id: _",
+                name, address, city, region, postal_code, country_code,
+                latitude, longitude,
+                archived AS "archived: bool",
+                created_at, updated_at
+            FROM locations
+            WHERE user_id = ?
+            LIMIT ? OFFSET ?
+            "#,
+            user_id,
+            limit_val,
+            offset_val
+        )
+            .fetch_all(&self.pool)
+            .await?;
 
-    async fn get_by_user(&self, user_id: Uuid, meta_user: Option<Uuid>) -> Result<Vec<Location>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(user_id)),
-            MySqlParam::from(oub(meta_user)),
-        ];
-
-        self.call_procedure_for_list("proc_location_by_user", params).await
-    }
-
-    async fn search(&self, query: String, limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<Location>, Error> {
-        let params = vec![
-            MySqlParam::from(query),
-            MySqlParam::from(limit),
-            MySqlParam::from(offset),
-            MySqlParam::from(oub(meta_user)),
-        ];
-
-        self.call_procedure_for_list("proc_location_search", params).await
-    }
-
-    async fn search_by_user(&self, user_id: Uuid, query: String, meta_user: Option<Uuid>) -> Result<Vec<Location>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(user_id)),
-            MySqlParam::from(query),
-            MySqlParam::from(oub(meta_user)),
-        ];
-
-        self.call_procedure_for_list("proc_location_search_by_user", params).await
+        Ok(locations)
     }
 }

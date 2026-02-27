@@ -1,47 +1,60 @@
-use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
-use serde::Serialize;
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde_json::json;
+use thiserror::Error;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum AppError {
-    #[error("unauthorized")]
-    Unauthorized,
-    #[error("forbidden")]
-    Forbidden,
-    #[error("not found")]
-    NotFound,
+    #[error("Internal server error: {0}")]
+    InternalError(String),
 
-    #[error("bad request: {0}")]
+    #[error("Bad Request: {0}")]
     BadRequest(String),
 
-    #[error("db error")]
-    Db(#[from] sqlx::Error),
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
 
-    #[error("internal error")]
-    Internal,
-}
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
 
-#[derive(Serialize)]
-struct ErrorBody {
-    error: String,
-    detail: Option<String>
+    #[error("Not Found: {0}")]
+    NotFound(String),
+
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
+    #[error(transparent)]
+    Internal(#[from] anyhow::Error),
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, msg) = match &self {
-            AppError::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
-            AppError::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
-            AppError::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
-            AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-            AppError::Db(_) => (StatusCode::INTERNAL_SERVER_ERROR, "db error".to_string()),
-            AppError::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal error".to_string()),
+        let (status, error_message) = match self {
+            AppError::InternalError(msg) => {
+                tracing::error!("Internal server error: {:?}", msg);
+
+                (StatusCode::INTERNAL_SERVER_ERROR, "An unexpected internal error occurred.".to_string())
+            },
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
+            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
+            AppError::Internal(err) => {
+                tracing::error!("Internal server error: {:?}", err);
+
+                (StatusCode::INTERNAL_SERVER_ERROR, "An unexpected internal error occurred.".to_string())
+            }
         };
 
-        let detail = match &self {
-            AppError::BadRequest(s) => Some(s.clone()),
-            _ => None,
-        };
+        let body = Json(json!({
+            "status": status.as_u16(),
+            "error": error_message,
+        }));
 
-        (status, Json(ErrorBody { error: msg, detail })).into_response()
+        (status, body).into_response()
     }
 }

@@ -25,9 +25,9 @@ pub fn convert_to_base_minor(
     let src_scale = scale_factor(src_minor);
     let base_scale = scale_factor(base_minor);
 
-    let amount_src_major = Decimal::from_i64(amount_minor).ok_or(AppError::Internal)? / src_scale;
+    let amount_src_major = Decimal::from_i64(amount_minor).ok_or(AppError::InternalError("Invalid value for amount minor".into()))? / src_scale;
     let amount_base_major = amount_src_major / rate_base_to_src;
 
     let base_minor_decimal = (amount_base_major * base_scale).round();
-    base_minor_decimal.to_i64().ok_or(AppError::Internal)
+    base_minor_decimal.to_i64().ok_or(AppError::InternalError("overflow in fx conversion".into()))
 }

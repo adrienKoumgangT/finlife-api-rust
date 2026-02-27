@@ -1,19 +1,17 @@
-use std::cmp::PartialEq;
 use axum::{
     extract::{FromRequestParts, State},
     http::{request::Parts, HeaderValue},
 };
-use async_trait::async_trait;
 use chrono::{Utc, Duration};
 use jsonwebtoken::{encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use serde::__private228::de::IdentifierDeserializer;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::modules::users::user::user_model::{User, UserRole};
 use crate::shared::errors::AppError;
 use crate::shared::state::AppState;
-use crate::shared::utils::bu;
 
 #[derive(Debug, Clone)]
 pub struct JwtVerifier {
@@ -69,7 +67,7 @@ impl JwtVerifier {
             &Header::new(Algorithm::RS256),
             &claims,
             &self.encoding_key
-        ).map_err(|_| AppError::Unauthorized) // Or specific "TokenCreationError"
+        ).map_err(|_| AppError::Unauthorized("Error during token generation".to_string())) // Or specific "TokenCreationError"
     }
 
     pub fn verify(&self, token: &str) -> Result<Claims, AppError> {
@@ -77,11 +75,14 @@ impl JwtVerifier {
             token,
             &self.decoding_key,
             &self.validation,
-        ).map_err(|_| AppError::Unauthorized)?;
+        ).map_err(|_| AppError::Unauthorized(format!("Invalid token: {}", token)))?;
 
         let c = token_data.claims;
         if c.iss != self.issuer || c.aud != self.audience {
-            return Err(AppError::Unauthorized);
+            return Err(AppError::Unauthorized(format!(
+                "Invalid issuer or audience: {} != {}",
+                c.iss, self.issuer
+            )));
         }
         Ok(c)
     }
@@ -95,13 +96,13 @@ pub struct AuthUser {
 
 impl From<User> for AuthUser {
     fn from(user: User) -> Self {
-        Self { user_id: bu(user.id.unwrap().as_slice()), role: user.role }
+        Self { user_id: user.id.unwrap(), role: user.role }
     }
 }
 
 impl From<&User> for AuthUser {
     fn from(user: &User) -> Self {
-        Self { user_id: bu(user.id.clone().unwrap().as_slice()), role: user.role.clone() }
+        Self { user_id: user.id.clone().unwrap(), role: user.role.clone() }
     }
 }
 
@@ -120,12 +121,12 @@ impl FromRequestParts<AppState> for AuthUser {
         let auth = parts
             .headers
             .get(axum::http::header::AUTHORIZATION)
-            .ok_or(AppError::Unauthorized)?;
+            .ok_or(AppError::Unauthorized("Token not found".to_string()))?;
 
-        let token = bearer_token(auth).ok_or(AppError::Unauthorized)?;
+        let token = bearer_token(auth).ok_or(AppError::Unauthorized("Invalid token format (should be Bearer <token>)".to_string()))?;
 
         let claims = state.jwt.verify(token)?;
-        let user_id = Uuid::parse_str(&claims.sub).map_err(|_| AppError::Unauthorized)?;
+        let user_id = Uuid::parse_str(&claims.sub).map_err(|_| AppError::Unauthorized("Invalid user_id format (should be UUID string)".to_string()))?;
 
         Ok(AuthUser { user_id, role: claims.role })
     }
@@ -133,5 +134,5 @@ impl FromRequestParts<AppState> for AuthUser {
 
 
 pub fn require_admin(user: &AuthUser) -> Result<(), AppError> {
-    if user.role == UserRole::ADMIN { Ok(()) } else { Err(AppError::Forbidden) }
+    if user.role == UserRole::ADMIN { Ok(()) } else { Err(AppError::Forbidden("Forbidden: only admin can access this resource".to_string())) }
 }

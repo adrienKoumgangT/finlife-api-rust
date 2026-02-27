@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bb8::Pool;
 use bb8_redis::RedisConnectionManager;
-use redis::{AsyncCommands, RedisError};
+use redis::AsyncCommands;
 use tracing::info;
 use crate::shared::config::AppDatabaseRedisConfig;
 use crate::shared::log::TimePrinter;
@@ -22,6 +22,7 @@ pub async fn connect(redis_config: &AppDatabaseRedisConfig) -> Result<RedisDatab
     Ok(pool.clone())
 }
 
+/// Sets a key with an optional TTL (Time To Live) in seconds.
 pub async fn set_key<T: serde::Serialize>(
     pool: &RedisDatabase,
     key: &str,
@@ -30,7 +31,7 @@ pub async fn set_key<T: serde::Serialize>(
 ) -> Result<()> {
     let timer = TimePrinter::with_message(&format!(
         "[REDIS] [SET] Key: {} ",
-        key.to_string()
+        key
     ));
 
     let mut conn = pool.get().await?;
@@ -43,17 +44,17 @@ pub async fn set_key<T: serde::Serialize>(
     }
 
     timer.log();
-
     Ok(())
 }
 
+/// Gets and deserializes a value from Redis.
 pub async fn get_key<T: serde::de::DeserializeOwned>(
     pool: &RedisDatabase,
     key: &str,
 ) -> Result<Option<T>> {
     let timer = TimePrinter::with_message(&format!(
         "[REDIS] [GET] Key: {} ",
-        key.to_string()
+        key
     ));
 
     let mut conn = pool.get().await?;
@@ -72,10 +73,14 @@ pub async fn get_key<T: serde::de::DeserializeOwned>(
     }
 }
 
-pub async fn delete_key(pool: &RedisDatabase, key: &str) -> Result<()> {
+/// Deletes a key from Redis.
+pub async fn delete_key(
+    pool: &RedisDatabase,
+    key: &str,
+) -> Result<()> {
     let timer = TimePrinter::with_message(&format!(
         "[REDIS] [DELETE] Key: {} ",
-        key.to_string()
+        key
     ));
 
     let mut conn = pool.get().await?;
@@ -83,4 +88,14 @@ pub async fn delete_key(pool: &RedisDatabase, key: &str) -> Result<()> {
 
     timer.log();
     Ok(())
+}
+
+/// Checks if a key exists.
+pub async fn exists(
+    pool: &RedisDatabase,
+    key: &str,
+) -> Result<bool> {
+    let mut conn = pool.get().await?;
+    let exists: bool = conn.exists(key).await?;
+    Ok(exists)
 }

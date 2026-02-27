@@ -1,39 +1,30 @@
 use anyhow::{Error, Result};
 use async_trait::async_trait;
-use rust_decimal::Decimal;
 use uuid::Uuid;
 use sqlx::MySqlPool;
 
 use crate::modules::people::people_model::People;
-use crate::shared::db::mysql::{GenericRepository, MySqlParam};
-use crate::shared::crud_repository::CrudRepository;
 use crate::shared::state::AppState;
-use crate::shared::utils::{oub, ub};
-
 
 #[async_trait]
 pub trait PeopleRepositoryInterface {
-    
-    async fn get(&self, people_id: Uuid, meta_user: Option<Uuid>) -> Result<Option<People>, Error>;
-    
-    async fn create(&self, people: People, meta_user: Option<Uuid>) -> Result<People, Error>;
-    
-    async fn update_image(&self, people_id: Uuid, image_url: Option<String>, meta_user: Option<Uuid>) -> Result<Option<People>, Error>;
-    
-    async fn update(&self, people_id: Uuid, name: String, email: Option<String>, phone: Option<String>, note: Option<String>, meta_user: Option<Uuid>) -> Result<Option<People>, Error>;
-    
-    async fn archived(&self, people_id: Uuid, archived: bool, meta_user: Option<Uuid>) -> Result<Option<People>, Error>;
-    
-    async fn delete(&self, people_id: Uuid, meta_user: Option<Uuid>) -> Result<(), Error>;
-    
-    async fn get_all(&self, limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<People>, Error>;
-    
-    async fn get_by_user(&self, user_id: Uuid, meta_user: Option<Uuid>) -> Result<Vec<People>, Error>;
-    
-    async fn search(&self, query: String,  limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<People>, Error>;
-    
-    async fn search_by_user(&self, user_id: Uuid, query: String, meta_user: Option<Uuid>) -> Result<Vec<People>, Error>;
-    
+
+    async fn get(&self, people_id: Uuid, user_id: Option<Uuid>) -> Result<Option<People>, Error>;
+
+    async fn create(&self, people: People, user_id: Option<Uuid>) -> Result<People, Error>;
+
+    async fn update_image(&self, people_id: Uuid, image_url: Option<String>, user_id: Option<Uuid>) -> Result<Option<People>, Error>;
+
+    async fn update(&self, people_id: Uuid, name: String, email: Option<String>, phone: Option<String>, note: Option<String>, user_id: Option<Uuid>) -> Result<Option<People>, Error>;
+
+    async fn archived(&self, people_id: Uuid, archived: bool, user_id: Option<Uuid>) -> Result<Option<People>, Error>;
+
+    async fn delete(&self, people_id: Uuid, user_id: Option<Uuid>) -> Result<(), Error>;
+
+    async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<People>, Error>;
+
+    async fn search_by_user(&self, user_id: Uuid, query: String) -> Result<Vec<People>, Error>;
+
 }
 
 
@@ -48,117 +39,143 @@ impl From<&AppState> for PeopleRepository {
     }
 }
 
-impl GenericRepository<People> for PeopleRepository {
-    fn get_pool(&self) -> &MySqlPool {
-        &self.pool
-    }
-}
-
 #[async_trait]
 impl PeopleRepositoryInterface for PeopleRepository {
-    async fn get(&self, people_id: Uuid, meta_user: Option<Uuid>) -> Result<Option<People>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(people_id)),
-            MySqlParam::from(oub(meta_user)),
-        ];
 
-        self.call_procedure_for_optional("proc_people_get_by_id", params).await
+    async fn get(&self, people_id: Uuid, user_id: Option<Uuid>) -> Result<Option<People>, Error> {
+        let people = sqlx::query_as!(
+            People,
+            r#"
+            SELECT
+                id AS "id: _",
+                user_id AS "user_id: _",
+                name, email, phone, image_url, note,
+                archived AS "archived: bool",
+                created_at, updated_at
+            FROM people
+            WHERE id = ? AND user_id = ?
+            "#,
+            people_id,
+            user_id
+        )
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(people)
     }
 
-    async fn create(&self, people: People, meta_user: Option<Uuid>) -> Result<People, Error> {
-        let params = vec![
-            MySqlParam::from(people.user_id),
-            MySqlParam::from(people.name),
-            MySqlParam::from(people.email),
-            MySqlParam::from(people.phone),
-            MySqlParam::from(people.image_url),
-            MySqlParam::from(people.note),
-            MySqlParam::from(people.archived),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn create(&self, people: People, user_id: Option<Uuid>) -> Result<People, Error> {
+        let new_id = Uuid::new_v4();
 
-        self.call_procedure_for_one("proc_people_create", params).await
+        sqlx::query!(
+            r#"
+            INSERT INTO people
+                (id, user_id, name, email, phone, image_url, note, archived)
+            VALUES
+                (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+            new_id,
+            people.user_id,
+            people.name,
+            people.email,
+            people.phone,
+            people.image_url,
+            people.note,
+            people.archived
+        )
+            .execute(&self.pool)
+            .await?;
+
+        let result = self.get(new_id, user_id).await?;
+        result.ok_or_else(|| Error::msg("Person not found after creation"))
     }
 
-    async fn update_image(&self, people_id: Uuid, image_url: Option<String>, meta_user: Option<Uuid>) -> Result<Option<People>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(people_id)),
-            MySqlParam::from(image_url),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn update_image(&self, people_id: Uuid, image_url: Option<String>, user_id: Option<Uuid>) -> Result<Option<People>, Error> {
+        sqlx::query!(
+            "UPDATE people SET image_url = ? WHERE id = ? AND user_id = ?",
+            image_url,
+            people_id,
+            user_id
+        )
+            .execute(&self.pool)
+            .await?;
 
-        self.call_procedure_for_optional("proc_people_update_image", params).await
+        self.get(people_id, user_id).await
     }
 
-    async fn update(&self, people_id: Uuid, name: String, email: Option<String>, phone: Option<String>, note: Option<String>, meta_user: Option<Uuid>) -> Result<Option<People>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(people_id)),
-            MySqlParam::from(name),
-            MySqlParam::from(email),
-            MySqlParam::from(phone),
-            MySqlParam::from(note),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn update(&self, people_id: Uuid, name: String, email: Option<String>, phone: Option<String>, note: Option<String>, user_id: Option<Uuid>) -> Result<Option<People>, Error> {
+        sqlx::query!(
+            "UPDATE people SET name = ?, email = ?, phone = ?, note = ? WHERE id = ? AND user_id = ?",
+            name, email, phone, note, people_id, user_id
+        )
+            .execute(&self.pool)
+            .await?;
 
-        self.call_procedure_for_optional("proc_people_update", params).await
+        self.get(people_id, user_id).await
     }
 
-    async fn archived(&self, people_id: Uuid, archived: bool, meta_user: Option<Uuid>) -> Result<Option<People>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(people_id)),
-            MySqlParam::from(archived),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn archived(&self, people_id: Uuid, archived: bool, user_id: Option<Uuid>) -> Result<Option<People>, Error> {
+        sqlx::query!(
+            "UPDATE people SET archived = ? WHERE id = ? AND user_id = ?",
+            archived,
+            people_id,
+            user_id
+        )
+            .execute(&self.pool)
+            .await?;
 
-        self.call_procedure_for_optional("proc_people_update_archived", params).await
+        self.get(people_id, user_id).await
     }
 
-    async fn delete(&self, people_id: Uuid, meta_user: Option<Uuid>) -> Result<(), Error> {
-        let params = vec![
-            MySqlParam::from(ub(people_id)),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn delete(&self, people_id: Uuid, user_id: Option<Uuid>) -> Result<(), Error> {
+        sqlx::query!("DELETE FROM people WHERE id = ? AND user_id = ?", people_id, user_id)
+            .execute(&self.pool)
+            .await?;
 
-        self.call_procedure("proc_people_delete", params).await
+        Ok(())
     }
 
-    async fn get_all(&self, limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<People>, Error> {
-        let params = vec![
-            MySqlParam::from(limit),
-            MySqlParam::from(offset),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<People>, Error> {
+        let people = sqlx::query_as!(
+            People,
+            r#"
+            SELECT
+                id AS "id: _", user_id AS "user_id: _",
+                name, email, phone, image_url, note,
+                archived AS "archived: bool",
+                created_at, updated_at
+            FROM people
+            WHERE user_id = ?
+            "#,
+            user_id
+        )
+            .fetch_all(&self.pool)
+            .await?;
 
-        self.call_procedure_for_list("proc_people_list", params).await
+        Ok(people)
     }
 
-    async fn get_by_user(&self, user_id: Uuid, meta_user: Option<Uuid>) -> Result<Vec<People>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(user_id)),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn search_by_user(&self, user_id: Uuid, query: String) -> Result<Vec<People>, Error> {
+        let search_term = format!("%{}%", query);
 
-        self.call_procedure_for_list("proc_people_by_user", params).await
-    }
+        let people = sqlx::query_as!(
+            People,
+            r#"
+            SELECT
+                id AS "id: _", user_id AS "user_id: _",
+                name, email, phone, image_url, note,
+                archived AS "archived: bool",
+                created_at, updated_at
+            FROM people
+            WHERE user_id = ? AND (name LIKE ? OR email LIKE ?)
+            "#,
+            user_id,
+            search_term,
+            search_term
+        )
+            .fetch_all(&self.pool)
+            .await?;
 
-    async fn search(&self, query: String,  limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<People>, Error> {
-        let params = vec![
-            MySqlParam::from(query),
-            MySqlParam::from(limit),
-            MySqlParam::from(offset),
-            MySqlParam::from(oub(meta_user)),
-        ];
-
-        self.call_procedure_for_list("proc_people_search", params).await
-    }
-
-    async fn search_by_user(&self, user_id: Uuid, query: String, meta_user: Option<Uuid>) -> Result<Vec<People>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(user_id)),
-            MySqlParam::from(query),
-            MySqlParam::from(oub(meta_user)),
-        ];
-
-        self.call_procedure_for_list("proc_people_search_by_user", params).await
+        Ok(people)
     }
 }

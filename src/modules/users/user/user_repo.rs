@@ -3,29 +3,28 @@ use async_trait::async_trait;
 use uuid::Uuid;
 use sqlx::MySqlPool;
 
-use crate::modules::users::user::user_model::User;
-use crate::shared::db::mysql::{GenericRepository, MySqlParam};
-use crate::shared::crud_repository::CrudRepository;
+use crate::modules::users::user::user_model::{User, UserRole};
 use crate::shared::state::AppState;
-use crate::shared::utils::{oub, ub};
 
 #[async_trait]
 pub trait UserRepositoryInterface {
-    async fn get(&self, user_id: Uuid, meta_user: Option<Uuid>) -> Result<Option<User>, Error>;
+    async fn get(&self, user_id: Uuid) -> Result<Option<User>, Error>;
 
-    async fn create(&self, user: User, meta_user: Option<Uuid>) -> Result<User, Error>;
+    async fn create(&self, user: User) -> Result<User, Error>;
+    
+    async fn verify_email(&self, user_id: Uuid) -> Result<bool, Error>;
 
-    async fn update_password(&self, user_id: Uuid, password: String, meta_user: Option<Uuid>) -> Result<Option<User>, Error>;
+    async fn update_password(&self, user_id: Uuid, password: String) -> Result<Option<User>, Error>;
 
-    async fn update_name(&self, user_id: Uuid, first_name: String, last_name: String, meta_user: Option<Uuid>) -> Result<Option<User>, Error>;
+    async fn update_name(&self, user_id: Uuid, first_name: String, last_name: String) -> Result<Option<User>, Error>;
 
-    async fn update_base_currency(&self, user_id: Uuid, base_currency: String, meta_user: Option<Uuid>) -> Result<Option<User>, Error>;
+    async fn update_base_currency(&self, user_id: Uuid, base_currency: String) -> Result<Option<User>, Error>;
 
-    async fn delete(&self, user_id: Uuid, meta_user: Option<Uuid>) -> Result<(), Error>;
+    async fn delete(&self, user_id: Uuid) -> Result<(), Error>;
 
-    async fn get_by_email(&self, email: String, meta_user: Option<Uuid>) -> Result<Option<User>, Error>;
+    async fn get_by_email(&self, email: String) -> Result<Option<User>, Error>;
 
-    async fn get_all(&self, limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<User>, Error>;
+    async fn get_all(&self, limit: Option<u32>, offset: Option<u32>) -> Result<Vec<User>, Error>;
 }
 
 #[derive(Clone)]
@@ -39,93 +38,175 @@ impl From<&AppState> for UserRepository {
     }
 }
 
-impl GenericRepository<User> for UserRepository {
-    fn get_pool(&self) -> &MySqlPool {
-        &self.pool
-    }
-}
-
-
 #[async_trait]
 impl UserRepositoryInterface for UserRepository {
-    async fn get(&self, user_id: Uuid, meta_user: Option<Uuid>) -> Result<Option<User>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(user_id)),
-            MySqlParam::from(oub(meta_user)),
-        ];
 
-        self.call_procedure_for_optional("proc_user_get_by_id", params).await
+    async fn get(&self, user_id: Uuid) -> Result<Option<User>, Error> {
+        let user = sqlx::query_as!(
+            User,
+            r#"
+            SELECT
+                id AS "id: _",
+                email,
+                email_verified AS "email_verified: bool",
+                password_hash,
+                role AS "role: String",
+                first_name,
+                last_name,
+                base_currency_code,
+                created_at,
+                updated_at
+            FROM users
+            WHERE id = ?
+            "#,
+            user_id
+        )
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(user)
     }
 
-    async fn create(&self, user: User, meta_user: Option<Uuid>) -> Result<User, Error> {
-        let params = vec![
-            MySqlParam::from(user.email),
-            MySqlParam::from(user.password_hash),
-            MySqlParam::from(user.first_name),
-            MySqlParam::from(user.last_name),
-            MySqlParam::from(user.base_currency_code),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn create(&self, user: User) -> Result<User, Error> {
+        let new_id = Uuid::new_v4();
 
-        self.call_procedure_for_one("proc_user_insert", params).await
+        // Convert the Enum to a string for MySQL insertion
+        let role_str = match user.role {
+            UserRole::ADMIN => "ADMIN",
+            UserRole::USER => "USER",
+        };
+
+        sqlx::query!(
+            r#"
+            INSERT INTO users
+                (id, email, password_hash, role, first_name, last_name, base_currency_code)
+            VALUES
+                (?, ?, ?, ?, ?, ?, ?)
+            "#,
+            new_id,
+            user.email,
+            user.password_hash,
+            role_str,
+            user.first_name,
+            user.last_name,
+            user.base_currency_code
+        )
+            .execute(&self.pool)
+            .await?;
+
+        let result = self.get(new_id).await?;
+        result.ok_or_else(|| Error::msg("User not found after creation"))
     }
 
-    async fn update_password(&self, user_id: Uuid, password: String, meta_user: Option<Uuid>) -> Result<Option<User>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(user_id)),
-            MySqlParam::from(password),
-            MySqlParam::from(oub(meta_user)),
-        ];
+    async fn verify_email(&self, user_id: Uuid) -> Result<bool, Error> {
+        sqlx::query!(
+            "UPDATE users SET email_verified = true WHERE id = ?",
+            user_id
+        )
+            .execute(&self.pool)
+            .await?;
         
-        self.call_procedure_for_optional("proc_user_update_password", params).await
+        Ok(true)
     }
 
-    async fn update_name(&self, user_id: Uuid, first_name: String, last_name: String, meta_user: Option<Uuid>) -> Result<Option<User>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(user_id)),
-            MySqlParam::from(first_name),
-            MySqlParam::from(last_name),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_optional("proc_user_update_name", params).await
+    async fn update_password(&self, user_id: Uuid, password: String) -> Result<Option<User>, Error> {
+        sqlx::query!(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            password,
+            user_id
+        )
+            .execute(&self.pool)
+            .await?;
+
+        self.get(user_id).await
     }
 
-    async fn update_base_currency(&self, user_id: Uuid, base_currency: String, meta_user: Option<Uuid>) -> Result<Option<User>, Error> {
-        let params = vec![
-            MySqlParam::from(ub(user_id)),
-            MySqlParam::from(base_currency),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_optional("proc_user_update_base_currency", params).await
+    async fn update_name(&self, user_id: Uuid, first_name: String, last_name: String) -> Result<Option<User>, Error> {
+        sqlx::query!(
+            "UPDATE users SET first_name = ?, last_name = ? WHERE id = ?",
+            first_name,
+            last_name,
+            user_id
+        )
+            .execute(&self.pool)
+            .await?;
+
+        self.get(user_id).await
     }
 
-    async fn delete(&self, user_id: Uuid, meta_user: Option<Uuid>) -> Result<(), Error> {
-        let params = vec![
-            MySqlParam::from(ub(user_id)),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-       self.call_procedure("proc_user_delete", params.clone()).await
+    async fn update_base_currency(&self, user_id: Uuid, base_currency: String) -> Result<Option<User>, Error> {
+        sqlx::query!(
+            "UPDATE users SET base_currency_code = ? WHERE id = ?",
+            base_currency,
+            user_id
+        )
+            .execute(&self.pool)
+            .await?;
+
+        self.get(user_id).await
     }
 
-    async fn get_by_email(&self, email: String, meta_user: Option<Uuid>) -> Result<Option<User>, Error> {
-        let params = vec![
-            MySqlParam::from(email),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_optional("proc_user_get_by_email", params).await
+    async fn delete(&self, user_id: Uuid) -> Result<(), Error> {
+        sqlx::query!("DELETE FROM users WHERE id = ?", user_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
     }
 
-    async fn get_all(&self, limit: Option<u32>, offset: Option<u32>, meta_user: Option<Uuid>) -> Result<Vec<User>, Error> {
-        let params = vec![
-            MySqlParam::from(limit),
-            MySqlParam::from(offset),
-            MySqlParam::from(oub(meta_user)),
-        ];
-        
-        self.call_procedure_for_list("proc_user_list", params.clone()).await
+    async fn get_by_email(&self, email: String) -> Result<Option<User>, Error> {
+        let user = sqlx::query_as!(
+            User,
+            r#"
+            SELECT
+                id AS "id: _",
+                email,
+                email_verified AS "email_verified: bool",
+                password_hash,
+                role AS "role: String",
+                first_name,
+                last_name,
+                base_currency_code,
+                created_at,
+                updated_at
+            FROM users
+            WHERE email = ?
+            "#,
+            email
+        )
+            .fetch_optional(&self.pool)
+            .await?;
+
+        Ok(user)
+    }
+
+    async fn get_all(&self, limit: Option<u32>, offset: Option<u32>) -> Result<Vec<User>, Error> {
+        let limit_val = limit.unwrap_or(100) as i64;
+        let offset_val = offset.unwrap_or(0) as i64;
+
+        let users = sqlx::query_as!(
+            User,
+            r#"
+            SELECT
+                id AS "id: _", 
+                email,
+                email_verified AS "email_verified: bool",
+                password_hash, 
+                role AS "role: String",
+                first_name, 
+                last_name, 
+                base_currency_code,
+                created_at, 
+                updated_at
+            FROM users
+            LIMIT ? OFFSET ?
+            "#,
+            limit_val,
+            offset_val
+        )
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(users)
     }
 }

@@ -21,18 +21,17 @@ impl UserGetCommand {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserGetByEmailCommand {
     pub user_email: String,
-    
-    pub auth_user: AuthUser,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserCreateCommand {
-    pub user_email: String,
+    pub email: String,
+    pub email_verified: bool,
 
-    pub user_first_name: String,
-    pub user_last_name: String,
+    pub first_name: String,
+    pub last_name: String,
 
-    pub user_base_currency_code: String,
+    pub base_currency_code: String,
 
     pub auth_user: AuthUser,
 }
@@ -40,31 +39,34 @@ pub struct UserCreateCommand {
 impl UserCreateCommand {
     pub fn new(request: UserCreateRequest, auth_user: AuthUser) -> Self {
         Self {
-            user_email: request.user_email,
-            user_first_name: request.user_first_name,
-            user_last_name: request.user_last_name,
-            user_base_currency_code: request.user_base_currency_code,
+            email: request.email,
+            email_verified: request.email_verified,
+            first_name: request.first_name,
+            last_name: request.last_name,
+            base_currency_code: request.base_currency_code,
             auth_user,
         }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct UserVerifyEmailCommand {
+    pub user_id: Uuid,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UserUpdatePasswordCommand {
     pub user_id: Uuid,
 
-    pub user_old_password: String,
-    pub user_new_password: String,
-    
-    pub auth_user: AuthUser,
+    pub new_password: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserUpdateNameCommand {
     pub user_id: Uuid,
 
-    pub user_first_name: String,
-    pub user_last_name: String,
+    pub first_name: String,
+    pub last_name: String,
     
     pub auth_user: AuthUser,
 }
@@ -73,8 +75,8 @@ impl UserUpdateNameCommand {
     pub fn new(user_id: Uuid, user_update_request: UserUpdateNameRequest, auth_user: AuthUser) -> Self {
         Self {
             user_id,
-            user_first_name: user_update_request.user_first_name,
-            user_last_name: user_update_request.user_last_name,
+            first_name: user_update_request.first_name,
+            last_name: user_update_request.last_name,
             auth_user,
         }
     }
@@ -84,7 +86,7 @@ impl UserUpdateNameCommand {
 pub struct UserUpdateBaseCurrencyCommand {
     pub user_id: Uuid,
 
-    pub user_base_currency_code: String,
+    pub base_currency_code: String,
     
     pub auth_user: AuthUser,
 }
@@ -93,7 +95,7 @@ impl UserUpdateBaseCurrencyCommand {
     pub fn new(user_id: Uuid, user_update_base_currency_request: UserUpdateBaseCurrencyRequest, auth_user: AuthUser) -> Self {
         Self { 
             user_id,
-            user_base_currency_code: user_update_base_currency_request.user_base_currency_code, 
+            base_currency_code: user_update_base_currency_request.base_currency_code,
             auth_user 
         }
     }

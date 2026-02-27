@@ -16,18 +16,33 @@ spec:
       containers:
         - image: mysql:8.0
           name: mysql
+          # args: ["--skip-grant-tables"] # skip creating root user password
           env:
-            # Use the secret we created in Step 1
+            # 1. Root Password (from Secret)
             - name: MYSQL_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mysql-pass
-                  key: password
+                  key: root-password
+
+            # 2. App Username (Plain text is fine for usernames)
+            - name: MYSQL_USER
+              value: "finlifedbuser"
+
+            # 3. App Password (from Secret)
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-pass
+                  key: app-password
+
+            - name: MYSQL_DATABASE
+              value: "finlifedb"
+
           ports:
             - containerPort: 3306
               name: mysql
           volumeMounts:
-            # Mount the persistent storage to the data directory
             - name: mysql-persistent-storage
               mountPath: /var/lib/mysql
       volumes:

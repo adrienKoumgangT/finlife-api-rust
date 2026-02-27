@@ -68,6 +68,13 @@ pub struct AppEmailSmtp {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppStorageConfig {
+    pub storage_endpoint_url: Option<String>,
+    pub bucket_name: String,
+    pub email_bucket_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub is_prod: bool,
 
@@ -78,6 +85,8 @@ pub struct AppConfig {
     pub database: AppDatabaseConfig,
 
     pub email_smtp: AppEmailSmtp,
+
+    pub storage: AppStorageConfig,
 
     pub bind_addr: String,
     pub metrics_addr: String,
@@ -208,6 +217,16 @@ impl AppConfig {
             from_name: smtp_from_name,
         };
 
+        let storage_endpoint_url = get_env("STORAGE_ENDPOINT_URL").ok();
+        let bucket_name = get_env("BUCKET_NAME")?;
+        let email_bucket_name = get_env("EMAIL_BUCKET_NAME")?;
+
+        let storage = AppStorageConfig {
+            storage_endpoint_url,
+            bucket_name,
+            email_bucket_name
+        };
+
         Ok(AppConfig {
             is_prod,
 
@@ -218,6 +237,8 @@ impl AppConfig {
             database,
 
             email_smtp,
+
+            storage,
 
             bind_addr,
             metrics_addr,

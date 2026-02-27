@@ -18,7 +18,14 @@ kubectl create secret generic mysql-pass --from-literal=password=yourpassword
 Replace `yourpassword` with your actual password.
 Example:
 ```bash
-kubectl create secret generic mysql-pass --from-literal=password=approot123
+kubectl create secret generic mysql-pass \
+  --from-literal=root-password=admin \
+  --from-literal=app-password=finlifedbpassword
+```
+
+**NB**: to delete secret:
+```bash
+kubectl delete secret mysql-pass
 ```
 
 
@@ -39,7 +46,7 @@ spec:
   resources:
     requests:
       storage: 1Gi
-  storageClassName: standard
+  storageClassName: hostpath
 ```
 
 Apply it:
@@ -166,14 +173,56 @@ FLUSH PRIVILEGES;
 example:
 ```mysql
 -- Create the user for the specific IP if they don't exist
-CREATE USER 'appuser'@'127.0.0.1' IDENTIFIED BY 'appuser123';
+CREATE USER 'finlifedbuser'@'127.0.0.1' IDENTIFIED BY 'finlifedbpassword';
 
 -- Grant privileges (adjust privileges as needed, e.g., ALL PRIVILEGES)
-GRANT ALL PRIVILEGES ON *.* TO 'appuser'@'127.0.0.1' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON *.* TO 'finlifedbuser'@'127.0.0.1' WITH GRANT OPTION;
 
 -- Apply changes
 FLUSH PRIVILEGES;
 ```
+
+
+## Redeploy the database after some problems
+
+### 1. Delete the existing Deployment and PVC:
+
+```bash
+kubectl delete -f mysql-deployment.yaml
+kubectl delete -f mysql-pvc.yaml
+```
+
+### 2. Ensure a secret is created
+
+```bash
+kubectl create secret generic mysql-pass \
+  --from-literal=root-password=admin \
+  --from-literal=app-password=finlifedbpassword
+```
+
+If it says it already exists, that is fine.
+
+### 3. Re-apply the clean files
+
+```bash
+kubectl apply -f mysql-pvc.yaml
+kubectl apply -f mysql-deployment.yaml
+kubectl apply -f mysql-service.yaml
+```
+
+Wait a minute for the pod to start, and then try your root login:
+
+```bash
+# kubectl exec -it $(kubectl get pods -l app=mysql -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p
+kubectl port-forward svc/mysql 3306:3306
+```
+Now, open your favorite SQL client and connect using:
+- Host: `localhost`
+- Port: `3306`
+- Username: `root`
+- Password: `approot123`
+
+
 
 
 

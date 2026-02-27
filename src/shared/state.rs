@@ -3,11 +3,13 @@ use bb8::Pool;
 use bb8_redis::RedisConnectionManager;
 use sqlx::MySqlPool;
 use std::fs;
-
+use std::sync::Arc;
 use crate::shared::auth::jwt::JwtVerifier;
 use crate::shared::config::AppConfig;
 use crate::shared::db::mysql as my_mysql;
 use crate::shared::db::redis as my_redis;
+use crate::shared::storage::s3_provider::S3StorageProvider;
+use crate::shared::storage::StorageProvider;
 // use crate::shared::metrics::prometheus::Metrics;
 
 #[derive(Clone)]
@@ -17,6 +19,7 @@ pub struct AppState {
     pub mysql_pool: MySqlPool,
     pub redis_pool: Pool<RedisConnectionManager>,
     // pub metrics: Metrics,
+    pub storage_provider: Arc<dyn StorageProvider>
 }
 
 impl AppState {
@@ -34,12 +37,15 @@ impl AppState {
         let redis_pool = my_redis::connect(&config_clone.database.redis.unwrap()).await?;
         // let metrics = Metrics::new();
 
+        let storage_provider = S3StorageProvider::new(&config.storage).await;
+
         Ok(Self {
             config,
             jwt,
             mysql_pool,
             redis_pool,
             // metrics,
+            storage_provider: Arc::new(storage_provider),
         })
     }
 }

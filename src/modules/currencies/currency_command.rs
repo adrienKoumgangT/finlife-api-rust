@@ -15,23 +15,23 @@ use crate::shared::response::PaginationRequest;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CurrencyGetCommand {
-    pub currency_code: String,
+    pub code: String,
 
     pub auth_user: AuthUser,
 }
 
 impl CurrencyGetCommand {
-    pub fn new(currency_code: String, auth_user: AuthUser) -> Self {
-        Self { currency_code, auth_user }
+    pub fn new(code: String, auth_user: AuthUser) -> Self {
+        Self { code, auth_user }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CurrencyCreateCommand {
-    pub currency_code: String,
-    pub currency_name: String,
+    pub code: String,
+    pub name: String,
 
-    pub currency_minor_unit: u8,
+    pub minor_unit: u8,
 
     pub auth_user: AuthUser,
 }
@@ -39,9 +39,9 @@ pub struct CurrencyCreateCommand {
 impl CurrencyCreateCommand {
     pub fn new(request: CurrencyCreateRequest, auth_user: AuthUser) -> Self {
         Self {
-            currency_code: request.currency_code,
-            currency_name: request.currency_name,
-            currency_minor_unit: request.currency_minor_unit,
+            code: request.code,
+            name: request.name,
+            minor_unit: request.minor_unit,
             auth_user,
         }
     }
@@ -49,8 +49,8 @@ impl CurrencyCreateCommand {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CurrencyUpdateNameCommand {
-    pub currency_code: String,
-    pub currency_name: String,
+    pub code: String,
+    pub name: String,
 
     pub auth_user: AuthUser,
 }
@@ -58,8 +58,8 @@ pub struct CurrencyUpdateNameCommand {
 impl CurrencyUpdateNameCommand {
     pub fn new(request: CurrencyUpdateNameRequest, auth_user: AuthUser) -> Self {
         Self {
-            currency_code: request.currency_code,
-            currency_name: request.currency_name,
+            code: request.code,
+            name: request.name,
             auth_user,
         }
     }
@@ -67,14 +67,14 @@ impl CurrencyUpdateNameCommand {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CurrencyDeleteCommand {
-    pub currency_code: String,
+    pub code: String,
 
     pub auth_user: AuthUser,
 }
 
 impl CurrencyDeleteCommand {
-    pub fn new(currency_code: String, auth_user: AuthUser) -> Self {
-        Self { currency_code, auth_user }
+    pub fn new(code: String, auth_user: AuthUser) -> Self {
+        Self { code, auth_user }
     }
 }
 
@@ -109,7 +109,7 @@ impl FxRateGetCommand {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FxRateByBaseCodeCommand {
-    pub fx_rate_base_code: String,
+    pub base_code: String,
 
     pub pagination: Option<PaginationRequest>,
 
@@ -117,18 +117,18 @@ pub struct FxRateByBaseCodeCommand {
 }
 
 impl FxRateByBaseCodeCommand {
-    pub fn new(fx_rate_base_code: String, pagination: Option<PaginationRequest>, auth_user: AuthUser) -> Self {
-        Self { fx_rate_base_code, pagination, auth_user }
+    pub fn new(base_code: String, pagination: Option<PaginationRequest>, auth_user: AuthUser) -> Self {
+        Self { base_code, pagination, auth_user }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FxRateCreateCommand {
-    pub fx_rate_base_code: String,
-    pub fx_rate_quote_code: String,
-    pub fx_rate_rate: Decimal,
-    pub fx_rate_as_of_date: NaiveDate,
-    pub fx_rate_source: String,
+    pub base_code: String,
+    pub quote_code: String,
+    pub rate: Decimal,
+    pub as_of_date: NaiveDate,
+    pub source: String,
 
     pub auth_user: AuthUser,
 }
@@ -136,11 +136,11 @@ pub struct FxRateCreateCommand {
 impl FxRateCreateCommand {
     pub fn new(request: FxRateCreateRequest, auth_user: AuthUser) -> Self {
         Self {
-            fx_rate_base_code: request.fx_rate_base_code,
-            fx_rate_quote_code: request.fx_rate_quote_code,
-            fx_rate_rate: request.fx_rate_rate,
-            fx_rate_as_of_date: request.fx_rate_as_of_date,
-            fx_rate_source: request.fx_rate_source,
+            base_code: request.base_code,
+            quote_code: request.quote_code,
+            rate: request.rate,
+            as_of_date: request.as_of_date,
+            source: request.source,
             auth_user,
         }
     }
@@ -150,7 +150,7 @@ impl FxRateCreateCommand {
 pub struct FxRateUpdateRateCommand {
     pub fx_rate_id: Uuid,
 
-    pub fx_rate_rate: Decimal,
+    pub rate: Decimal,
 
     pub auth_user: AuthUser,
 }
@@ -159,7 +159,7 @@ impl FxRateUpdateRateCommand {
     pub fn new(fx_rate_id: Uuid, request: FxRateUpdateRateRequest, auth_user: AuthUser) -> Self {
         Self {
             fx_rate_id,
-            fx_rate_rate: request.fx_rate_rate,
+            rate: request.rate,
             auth_user,
         }
     }

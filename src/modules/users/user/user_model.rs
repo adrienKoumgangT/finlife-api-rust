@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use sqlx::{mysql::MySqlRow, Error as SqlxError, Row};
-use std::collections::HashMap;
 use utoipa::ToSchema;
 
 use crate::modules::users::{
@@ -11,22 +9,36 @@ use crate::modules::users::{
 };
 use crate::shared::{
     auth::password::generate_password,
-    db::mysql::FromSqlRow
 };
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema)]
 pub enum UserRole {
-    // GOD,
     ADMIN,
     USER,
 }
 
+impl UserRole {
+    pub fn is_admin(&self) -> bool {
+        *self == UserRole::ADMIN
+    }
+}
+
+impl From<String> for UserRole {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "ADMIN" => UserRole::ADMIN,
+            _ => UserRole::USER,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
-    pub id: Option<Vec<u8>>,
+    pub id: Option<Uuid>,
 
     pub email: String,
+    pub email_verified: bool,
     pub password_hash: String,
 
     pub role: UserRole,
@@ -39,32 +51,17 @@ pub struct User {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-impl FromSqlRow for User {
-    fn map_row_to_entity(row: MySqlRow, index_map: &HashMap<String, usize>) -> Result<Self, SqlxError> {
-        Ok(User {
-            id: row.try_get(index_map["id"])?,
-            email: row.try_get(index_map["email"])?,
-            password_hash: row.try_get(index_map["password_hash"])?,
-            role: row.try_get(index_map["role"])?,
-            first_name: row.try_get(index_map["first_name"])?,
-            last_name: row.try_get(index_map["last_name"])?,
-            base_currency_code: row.try_get(index_map["base_currency_code"])?,
-            created_at: row.try_get(index_map["created_at"])?,
-            updated_at: row.try_get(index_map["updated_at"])?,
-        })
-    }
-}
-
 impl From<UserCreateCommand> for User {
     fn from(command: UserCreateCommand) -> Self {
         Self {
             id: None,
-            email: command.user_email,
+            email: command.email,
+            email_verified: command.email_verified,
             password_hash: generate_password(12),
             role: UserRole::USER,
-            first_name: command.user_first_name,
-            last_name: command.user_last_name,
-            base_currency_code: command.user_base_currency_code,
+            first_name: command.first_name,
+            last_name: command.last_name,
+            base_currency_code: command.base_currency_code,
             created_at: None,
             updated_at: None,
         }
@@ -75,12 +72,13 @@ impl From<RegisterCommand> for User {
     fn from(command: RegisterCommand) -> Self {
         Self {
             id: None,
-            email: command.user_email,
+            email: command.email,
+            email_verified: false,
             password_hash: generate_password(12),
             role: UserRole::USER,
-            first_name: command.user_first_name,
-            last_name: command.user_last_name,
-            base_currency_code: command.user_base_currency_code,
+            first_name: command.first_name,
+            last_name: command.last_name,
+            base_currency_code: command.base_currency_code,
             created_at: None,
             updated_at: None,
         }

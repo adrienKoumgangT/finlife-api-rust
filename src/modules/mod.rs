@@ -15,3 +15,4 @@ pub mod payees;
 pub mod routes;
 pub mod emails;
 pub mod notifications;
+pub mod files;

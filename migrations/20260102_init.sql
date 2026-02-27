@@ -9,6 +9,7 @@ SET time_zone = '+00:00';
 CREATE TABLE users (
     id                 BINARY(16) PRIMARY KEY,
     email              VARCHAR(320) NOT NULL UNIQUE,
+    email_verified     TINYINT(1) NOT NULL DEFAULT 0,
     password_hash      VARCHAR(255) NOT NULL,
     role               ENUM('ADMIN','USER') NOT NULL DEFAULT 'USER',
     first_name         VARCHAR(255) NOT NULL,
@@ -16,6 +17,53 @@ CREATE TABLE users (
     base_currency_code CHAR(3) NOT NULL DEFAULT 'EUR',
     created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+CREATE TABLE user_login_logs (
+     id             BINARY(16) PRIMARY KEY,
+     user_id        BINARY(16) NOT NULL,
+     login_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+     ip_address     VARCHAR(45) NULL,
+     user_agent     VARCHAR(255) NULL,
+     status         ENUM('SUCCESS', 'FAILED') NOT NULL DEFAULT 'SUCCESS',
+     failure_reason VARCHAR(255) NULL,
+
+     KEY idx_login_logs_user_date (user_id, login_at),
+
+     CONSTRAINT fk_login_logs_user
+         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- -----------------------------
+-- FILES
+-- -----------------------------
+
+CREATE TABLE files (
+    id                BINARY(16) PRIMARY KEY,
+    user_id           BINARY(16) NOT NULL,
+
+    original_name     VARCHAR(255) NOT NULL,
+    storage_path      VARCHAR(512) NOT NULL, -- S3 key, Cloudflare R2 path, or local path
+    mime_type         VARCHAR(120) NOT NULL,
+    size_bytes        BIGINT NOT NULL,
+
+    duration_seconds  INT NULL,              -- For audio/video
+    thumbnail_file_id BINARY(16) NULL,       -- Self-referencing FK for video thumbnails
+
+    status            ENUM('UPLOADING', 'READY', 'FAILED', 'DELETED') NOT NULL DEFAULT 'UPLOADING',
+
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    KEY idx_files_user (user_id),
+    KEY idx_files_status (status),
+
+    CONSTRAINT fk_files_user
+       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_files_thumbnail
+       FOREIGN KEY (thumbnail_file_id) REFERENCES files(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------
@@ -626,5 +674,87 @@ CREATE TABLE email_verification_tokens (
 
     CONSTRAINT fk_email_verify_user
        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- -----------------------------
+-- REVIEW SESSIONS
+-- -----------------------------
+CREATE TABLE review_sessions (
+    id           BINARY(16) PRIMARY KEY,
+    user_id      BINARY(16) NOT NULL,
+    review_type  ENUM('WEEKLY', 'MONTHLY') NOT NULL,
+    period_start DATE NOT NULL,
+    period_end   DATE NOT NULL,
+    status       ENUM('DRAFT', 'COMPLETED') NOT NULL DEFAULT 'DRAFT',
+
+    notes        TEXT NULL,
+    actions      JSON NULL,
+    decisions    JSON NULL,
+
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    KEY idx_reviews_user_date (user_id, period_start),
+
+    CONSTRAINT fk_reviews_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -----------------------------
+-- INVESTMENTS (Portfolios > Positions > Trades)
+-- -----------------------------
+CREATE TABLE investment_portfolios (
+    id                 BINARY(16) PRIMARY KEY,
+    user_id            BINARY(16) NOT NULL,
+    name               VARCHAR(120) NOT NULL,
+    base_currency_code CHAR(3) NOT NULL,
+
+    created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    KEY idx_portfolios_user (user_id),
+
+    CONSTRAINT fk_portfolios_user
+       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_portfolios_currency
+       FOREIGN KEY (base_currency_code) REFERENCES currencies(code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE investment_positions (
+    id           BINARY(16) PRIMARY KEY,
+    portfolio_id BINARY(16) NOT NULL,
+    symbol       VARCHAR(32) NOT NULL,
+    name         VARCHAR(120) NOT NULL,
+    status       ENUM('OPEN', 'CLOSED') NOT NULL DEFAULT 'OPEN',
+
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_position_portfolio_symbol (portfolio_id, symbol),
+
+    CONSTRAINT fk_positions_portfolio
+        FOREIGN KEY (portfolio_id) REFERENCES investment_portfolios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE investment_trades (
+    id            BINARY(16) PRIMARY KEY,
+    position_id   BINARY(16) NOT NULL,
+    trade_type    ENUM('BUY', 'SELL') NOT NULL,
+    trade_date    DATETIME(3) NOT NULL,
+
+    quantity      DECIMAL(24,12) NOT NULL,
+    price_minor   BIGINT NOT NULL,
+    fees_minor    BIGINT NOT NULL DEFAULT 0,
+    currency_code CHAR(3) NOT NULL,
+
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    KEY idx_trades_position_date (position_id, trade_date),
+
+    CONSTRAINT fk_trades_position
+       FOREIGN KEY (position_id) REFERENCES investment_positions(id) ON DELETE CASCADE,
+    CONSTRAINT fk_trades_currency
+       FOREIGN KEY (currency_code) REFERENCES currencies(code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
