@@ -1,4 +1,5 @@
 use axum::{extract::{Path, State}, http::StatusCode, routing::{get}, Json, Router};
+use chrono::{Local, Datelike};
 use uuid::Uuid;
 
 use crate::modules::budgets::{
@@ -17,6 +18,7 @@ pub fn routes() -> Router<AppState> {
         // --- Budgets ---
         .route("/", get(get_budgets).post(post_budget))
         .route("/{budget_id}", get(get_budget).put(put_budget).delete(delete_budget))
+        .route("/by/year/{year}", get(get_budgets_by_year))
 
         // --- Budget Envelopes ---
         .route("/{budget_id}/envelopes", get(get_envelopes).post(post_envelope))
@@ -40,7 +42,30 @@ pub async fn get_budgets(
     State(state): State<AppState>,
     auth_user: AuthUser,
 ) -> Result<Json<Vec<BudgetResponse>>, AppError> {
-    let command = BudgetListByUserCommand::new(auth_user.user_id.clone(), None, auth_user);
+    let now = Local::now();
+    let command = BudgetListByUserCommand::new(auth_user.user_id.clone(), now.year() as u32, auth_user);
+    let budget_service = BudgetService::from(&state);
+
+    let budgets = budget_service.get_budgets_by_user(command).await?;
+    Ok(Json(budgets))
+}
+
+
+#[utoipa::path(
+    get,
+    path = "/api/services/budgets/by/year/{year}",
+    responses(
+        (status = StatusCode::OK, description = "List of Budgets for current user", body = Vec<BudgetResponse>),
+        (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal Server Error"),
+    ),
+    tag = "Budget"
+)]
+pub async fn get_budgets_by_year(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
+    Path(year): Path<u32>,
+) -> Result<Json<Vec<BudgetResponse>>, AppError> {
+    let command = BudgetListByUserCommand::new(auth_user.user_id.clone(), year, auth_user);
     let budget_service = BudgetService::from(&state);
 
     let budgets = budget_service.get_budgets_by_user(command).await?;
@@ -199,12 +224,9 @@ pub async fn post_envelope(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Path(budget_id): Path<Uuid>,
-    Json(mut create_request): Json<BudgetEnvelopeCreateRequest>
+    Json(create_request): Json<BudgetEnvelopeCreateRequest>
 ) -> Result<Json<BudgetEnvelopeResponse>, AppError> {
-    // Override the budget_id from the path parameter for safety
-    create_request.budget_id = budget_id;
-
-    let command = BudgetEnvelopeCreateCommand::new(create_request, auth_user);
+    let command = BudgetEnvelopeCreateCommand::new(budget_id, create_request, auth_user);
     let budget_service = BudgetService::from(&state);
 
     let envelope = budget_service.create_envelope(command).await?;

@@ -40,9 +40,10 @@ pub struct GoalService {
 
 impl From<&AppState> for GoalService {
     fn from(app_state: &AppState) -> Self {
-        let goal_repo = GoalRepository::from(app_state);
-        let redis_pool = app_state.redis_pool.clone();
-        Self { goal_repo, redis_pool: Option::from(redis_pool) }
+        Self {
+            goal_repo: GoalRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 

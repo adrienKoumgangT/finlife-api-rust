@@ -64,7 +64,12 @@ pub struct InvestmentService {
 }
 
 impl From<&AppState> for InvestmentService {
-    fn from(app_state: &AppState) -> Self { Self { repo: InvestmentRepository::from(app_state), redis_pool: Option::from(app_state.redis_pool.clone()) } }
+    fn from(app_state: &AppState) -> Self {
+        Self {
+            repo: InvestmentRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
+    }
 }
 
 impl InvestmentService {

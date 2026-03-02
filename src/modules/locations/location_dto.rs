@@ -16,6 +16,7 @@ pub struct LocationResponse {
 
     pub address: Option<String>,
     pub city: Option<String>,
+    pub district: Option<String>,
     pub region: Option<String>,
     pub postal_code: Option<String>,
     pub country_code: Option<String>,
@@ -36,6 +37,7 @@ impl From<Location> for LocationResponse {
             name: location.name,
             address: location.address,
             city: location.city,
+            district: location.district,
             region: location.region,
             postal_code: location.postal_code,
             country_code: location.country_code,
@@ -54,6 +56,7 @@ pub struct LocationCreateRequest {
 
     pub address: Option<String>,
     pub city: Option<String>,
+    pub district: Option<String>,
     pub region: Option<String>,
     pub postal_code: Option<String>,
     pub country_code: Option<String>,
@@ -67,6 +70,7 @@ pub struct LocationUpdateRequest {
     pub name: String,
     pub address: Option<String>,
     pub city: Option<String>,
+    pub district: Option<String>,
     pub region: Option<String>,
     pub postal_code: Option<String>,
     pub country_code: Option<String>,

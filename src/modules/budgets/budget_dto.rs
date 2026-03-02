@@ -10,7 +10,6 @@ use crate::modules::budgets::budget_model::{Budget, BudgetEnvelope, BudgetStatus
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct BudgetResponse {
     pub budget_id: Uuid,
-    pub user_id: Uuid,
     pub month: NaiveDate,
     pub base_currency_code: String,
     pub person_id: Option<Uuid>,
@@ -23,7 +22,6 @@ impl From<Budget> for BudgetResponse {
     fn from(budget: Budget) -> Self {
         Self {
             budget_id: budget.id.unwrap(),
-            user_id: budget.user_id,
             month: budget.month,
             base_currency_code: budget.base_currency_code,
             person_id: budget.person_id,
@@ -80,7 +78,6 @@ impl From<BudgetEnvelope> for BudgetEnvelopeResponse {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct BudgetEnvelopeCreateRequest {
-    pub budget_id: Uuid,
     pub category_id: Uuid,
     pub planned_base_minor: Option<i64>,
     pub carryover_base_minor: Option<i64>,

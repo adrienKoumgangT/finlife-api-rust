@@ -13,7 +13,7 @@ pub struct PeopleResponse {
 
     pub email: Option<String>,
     pub phone: Option<String>,
-    pub image_url: Option<String>,
+    pub image: Option<Uuid>,
     pub note: Option<String>,
 
     pub archived: bool,
@@ -29,7 +29,7 @@ impl From<People> for PeopleResponse {
             name: people.name,
             email: people.email,
             phone: people.phone,
-            image_url: people.image_url,
+            image: people.image,
             note: people.note,
             archived: people.archived,
             created_at: people.created_at,
@@ -46,7 +46,7 @@ impl From<&People> for PeopleResponse {
             name: people.name.clone(),
             email: people.email.clone(),
             phone: people.phone.clone(),
-            image_url: people.image_url.clone(),
+            image: people.image.clone(),
             note: people.note.clone(),
             archived: people.archived,
             created_at: people.created_at.clone(),
@@ -61,7 +61,7 @@ pub struct PeopleCreateRequest {
 
     pub email: Option<String>,
     pub phone: Option<String>,
-    pub image_url: Option<String>,
+    pub image: Option<Uuid>,
     pub note: Option<String>,
 }
 

@@ -11,27 +11,43 @@ use crate::shared::state::AppState;
 #[async_trait]
 pub trait BudgetRepositoryInterface {
 
-    async fn get_budget(&self, budget_id: Uuid, user_id: Option<Uuid>) -> Result<Option<Budget>, Error>;
+    async fn get_budget(&self, budget_id: Uuid, user_id: Uuid) -> Result<Option<Budget>, Error>;
 
-    async fn create_budget(&self, budget: Budget, user_id: Option<Uuid>) -> Result<Budget, Error>;
+    async fn create_budget(&self, budget: Budget, user_id: Uuid) -> Result<Budget, Error>;
 
-    async fn update_budget(&self, budget_id: Uuid, base_currency_code: String, person_id: Option<Uuid>, status: BudgetStatus, user_id: Option<Uuid>) -> Result<Option<Budget>, Error>;
+    async fn update_budget(
+        &self, 
+        budget_id: Uuid, 
+        base_currency_code: String, 
+        person_id: Option<Uuid>, 
+        status: BudgetStatus, 
+        user_id: Uuid
+    ) -> Result<Option<Budget>, Error>;
 
-    async fn delete_budget(&self, budget_id: Uuid, user_id: Option<Uuid>) -> Result<(), Error>;
+    async fn delete_budget(&self, budget_id: Uuid, user_id: Uuid) -> Result<(), Error>;
 
-    async fn get_budgets_by_user(&self, user_id: Uuid, limit: Option<u32>, offset: Option<u32>) -> Result<Vec<Budget>, Error>;
+    async fn get_budgets_by_user(&self, user_id: Uuid, year: u32) -> Result<Vec<Budget>, Error>;
+
+    
+    // TODO: add get last 12 months budgets
 
 
+    async fn get_envelope(&self, envelope_id: Uuid, user_id: Uuid) -> Result<Option<BudgetEnvelope>, Error>;
 
-    async fn get_envelope(&self, envelope_id: Uuid, user_id: Option<Uuid>) -> Result<Option<BudgetEnvelope>, Error>;
+    async fn create_envelope(&self, envelope: BudgetEnvelope, user_id: Uuid) -> Result<BudgetEnvelope, Error>;
 
-    async fn create_envelope(&self, envelope: BudgetEnvelope, user_id: Option<Uuid>) -> Result<BudgetEnvelope, Error>;
+    async fn update_envelope(
+        &self, 
+        envelope_id: Uuid, 
+        planned: i64, 
+        carryover: i64, 
+        rule: RolloverRule, 
+        user_id: Uuid
+    ) -> Result<Option<BudgetEnvelope>, Error>;
 
-    async fn update_envelope(&self, envelope_id: Uuid, planned: i64, carryover: i64, rule: RolloverRule, user_id: Option<Uuid>) -> Result<Option<BudgetEnvelope>, Error>;
+    async fn delete_envelope(&self, envelope_id: Uuid, user_id: Uuid) -> Result<(), Error>;
 
-    async fn delete_envelope(&self, envelope_id: Uuid, user_id: Option<Uuid>) -> Result<(), Error>;
-
-    async fn get_envelopes_by_budget(&self, budget_id: Uuid, limit: Option<u32>, offset: Option<u32>, user_id: Option<Uuid>) -> Result<Vec<BudgetEnvelope>, Error>;
+    async fn get_envelopes_by_budget(&self, budget_id: Uuid, user_id: Uuid) -> Result<Vec<BudgetEnvelope>, Error>;
 
 }
 
@@ -53,13 +69,13 @@ impl BudgetRepositoryInterface for BudgetRepository {
     // ==========================================
     //                 BUDGETS
     // ==========================================
-    async fn get_budget(&self, budget_id: Uuid, user_id: Option<Uuid>) -> Result<Option<Budget>, Error> {
+    async fn get_budget(&self, budget_id: Uuid, user_id: Uuid) -> Result<Option<Budget>, Error> {
         let budget = sqlx::query_as!(
             Budget,
             r#"
             SELECT
                 id AS "id: _", user_id AS "user_id: _",
-                month, base_currency_code, person_id AS "person_id: _",
+                budgets.month, base_currency_code, person_id AS "person_id: _",
                 status AS "status: String", created_at, updated_at
             FROM budgets
             WHERE id = ? AND user_id = ?
@@ -69,7 +85,7 @@ impl BudgetRepositoryInterface for BudgetRepository {
         Ok(budget)
     }
 
-    async fn create_budget(&self, budget: Budget, user_id: Option<Uuid>) -> Result<Budget, Error> {
+    async fn create_budget(&self, budget: Budget, user_id: Uuid) -> Result<Budget, Error> {
         let new_id = Uuid::new_v4();
         let status_str = budget.status.as_str();
 
@@ -81,7 +97,14 @@ impl BudgetRepositoryInterface for BudgetRepository {
         self.get_budget(new_id, user_id).await?.ok_or_else(|| Error::msg("Budget not found"))
     }
 
-    async fn update_budget(&self, budget_id: Uuid, base_currency_code: String, person_id: Option<Uuid>, status: BudgetStatus, user_id: Option<Uuid>) -> Result<Option<Budget>, Error> {
+    async fn update_budget(
+        &self, 
+        budget_id: Uuid, 
+        base_currency_code: String, 
+        person_id: Option<Uuid>, 
+        status: BudgetStatus, 
+        user_id: Uuid
+    ) -> Result<Option<Budget>, Error> {
         let status_str = status.as_str();
         sqlx::query!(
             "UPDATE budgets SET base_currency_code = ?, person_id = ?, status = ? WHERE id = ? AND user_id = ?",
@@ -91,24 +114,27 @@ impl BudgetRepositoryInterface for BudgetRepository {
         self.get_budget(budget_id, user_id).await
     }
 
-    async fn delete_budget(&self, budget_id: Uuid, user_id: Option<Uuid>) -> Result<(), Error> {
+    async fn delete_budget(&self, budget_id: Uuid, user_id: Uuid) -> Result<(), Error> {
         sqlx::query!("DELETE FROM budgets WHERE id = ? AND user_id = ?", budget_id, user_id).execute(&self.pool).await?;
         Ok(())
     }
 
-    async fn get_budgets_by_user(&self, user_id: Uuid, limit: Option<u32>, offset: Option<u32>) -> Result<Vec<Budget>, Error> {
-        let limit_val = limit.unwrap_or(100) as i64;
-        let offset_val = offset.unwrap_or(0) as i64;
-
+    async fn get_budgets_by_user(&self, user_id: Uuid, year: u32) -> Result<Vec<Budget>, Error> {
         let budgets = sqlx::query_as!(
             Budget,
             r#"
             SELECT
-                id AS "id: _", user_id AS "user_id: _", month, base_currency_code,
-                person_id AS "person_id: _", status AS "status: String", created_at, updated_at
-            FROM budgets WHERE user_id = ? ORDER BY month DESC LIMIT ? OFFSET ?
+                id AS "id: _",
+                user_id AS "user_id: _",
+                budgets.month, base_currency_code,
+                person_id AS "person_id: _", 
+                status AS "status: String", 
+                created_at, updated_at
+            FROM budgets 
+            WHERE user_id = ? AND YEAR(budgets.month) = ?
+            ORDER BY budgets.month DESC
             "#,
-            user_id, limit_val, offset_val
+            user_id, year
         ).fetch_all(&self.pool).await?;
         Ok(budgets)
     }
@@ -116,7 +142,7 @@ impl BudgetRepositoryInterface for BudgetRepository {
     // ==========================================
     //            BUDGET ENVELOPES
     // ==========================================
-    async fn get_envelope(&self, envelope_id: Uuid, user_id: Option<Uuid>) -> Result<Option<BudgetEnvelope>, Error> {
+    async fn get_envelope(&self, envelope_id: Uuid, user_id: Uuid) -> Result<Option<BudgetEnvelope>, Error> {
         let env = sqlx::query_as!(
             BudgetEnvelope,
             r#"
@@ -133,28 +159,44 @@ impl BudgetRepositoryInterface for BudgetRepository {
         Ok(env)
     }
 
-    async fn create_envelope(&self, envelope: BudgetEnvelope, user_id: Option<Uuid>) -> Result<BudgetEnvelope, Error> {
-        // Security check
-        let budget_exists = sqlx::query!("SELECT id FROM budgets WHERE id = ? AND user_id = ?", envelope.budget_id, user_id).fetch_optional(&self.pool).await?;
+    async fn create_envelope(&self, envelope: BudgetEnvelope, user_id: Uuid) -> Result<BudgetEnvelope, Error> {
+        let budget_exists = sqlx::query!(
+            r#"SELECT id FROM budgets WHERE id = ? AND user_id = ?"#, 
+            envelope.budget_id, user_id
+        ).fetch_optional(&self.pool).await?;
         if budget_exists.is_none() { return Err(Error::msg("Unauthorized or budget not found")); }
 
         let new_id = Uuid::new_v4();
         let rule_str = envelope.rollover_rule.as_str();
 
         sqlx::query!(
-            "INSERT INTO budget_envelopes (id, budget_id, category_id, planned_base_minor, carryover_base_minor, rollover_rule) VALUES (?, ?, ?, ?, ?, ?)",
+            r#"
+            INSERT INTO budget_envelopes 
+                (id, budget_id, category_id, planned_base_minor, carryover_base_minor, rollover_rule) 
+            VALUES 
+                (?, ?, ?, ?, ?, ?)
+            "#,
             new_id, envelope.budget_id, envelope.category_id, envelope.planned_base_minor, envelope.carryover_base_minor, rule_str
         ).execute(&self.pool).await?;
 
         self.get_envelope(new_id, user_id).await?.ok_or_else(|| Error::msg("Envelope not found"))
     }
 
-    async fn update_envelope(&self, envelope_id: Uuid, planned: i64, carryover: i64, rule: RolloverRule, user_id: Option<Uuid>) -> Result<Option<BudgetEnvelope>, Error> {
+    async fn update_envelope(
+        &self, 
+        envelope_id: Uuid, 
+        planned: i64, 
+        carryover: i64, 
+        rule: RolloverRule, 
+        user_id: Uuid
+    ) -> Result<Option<BudgetEnvelope>, Error> {
         let rule_str = rule.as_str();
         sqlx::query!(
             r#"
             UPDATE budget_envelopes e JOIN budgets b ON b.id = e.budget_id
-            SET e.planned_base_minor = ?, e.carryover_base_minor = ?, e.rollover_rule = ?
+            SET e.planned_base_minor = ?,
+                e.carryover_base_minor = ?,
+                e.rollover_rule = ?
             WHERE e.id = ? AND b.user_id = ?
             "#,
             planned, carryover, rule_str, envelope_id, user_id
@@ -163,29 +205,36 @@ impl BudgetRepositoryInterface for BudgetRepository {
         self.get_envelope(envelope_id, user_id).await
     }
 
-    async fn delete_envelope(&self, envelope_id: Uuid, user_id: Option<Uuid>) -> Result<(), Error> {
-        sqlx::query!("DELETE e FROM budget_envelopes e JOIN budgets b ON b.id = e.budget_id WHERE e.id = ? AND b.user_id = ?", envelope_id, user_id)
+    async fn delete_envelope(&self, envelope_id: Uuid, user_id: Uuid) -> Result<(), Error> {
+        sqlx::query!(
+            r#"
+            DELETE e 
+            FROM budget_envelopes e 
+                   JOIN budgets b ON b.id = e.budget_id 
+            WHERE e.id = ? AND b.user_id = ?
+            "#,
+            envelope_id, user_id
+        )
             .execute(&self.pool).await?;
         Ok(())
     }
 
-    async fn get_envelopes_by_budget(&self, budget_id: Uuid, limit: Option<u32>, offset: Option<u32>, user_id: Option<Uuid>) -> Result<Vec<BudgetEnvelope>, Error> {
-        let limit_val = limit.unwrap_or(100) as i64;
-        let offset_val = offset.unwrap_or(0) as i64;
-
+    async fn get_envelopes_by_budget(&self, budget_id: Uuid, user_id: Uuid) -> Result<Vec<BudgetEnvelope>, Error> {
         let envs = sqlx::query_as!(
             BudgetEnvelope,
             r#"
             SELECT
-                e.id AS "id: _", e.budget_id AS "budget_id: _", e.category_id AS "category_id: _",
-                e.planned_base_minor, e.carryover_base_minor, e.rollover_rule AS "rollover_rule: String",
+                e.id AS "id: _",
+                e.budget_id AS "budget_id: _",
+                e.category_id AS "category_id: _",
+                e.planned_base_minor, e.carryover_base_minor,
+                e.rollover_rule AS "rollover_rule: String",
                 e.created_at, e.updated_at
             FROM budget_envelopes e
             JOIN budgets b ON b.id = e.budget_id
             WHERE e.budget_id = ? AND b.user_id = ?
-            LIMIT ? OFFSET ?
             "#,
-            budget_id, user_id, limit_val, offset_val
+            budget_id, user_id
         ).fetch_all(&self.pool).await?;
         Ok(envs)
     }

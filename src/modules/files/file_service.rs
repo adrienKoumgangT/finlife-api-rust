@@ -46,11 +46,11 @@ pub struct FileService {
 
 impl From<&AppState> for FileService {
     fn from(app_state: &AppState) -> Self {
-        let file_repo = FileRepository::from(app_state);
-        let redis_pool = app_state.redis_pool.clone();
-        let storage_provider = app_state.storage_provider.clone();
-
-        Self { file_repo, redis_pool: Option::from(redis_pool), storage_provider }
+        Self {
+            file_repo: FileRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone(),
+            storage_provider: app_state.storage_provider.clone()
+        }
     }
 }
 

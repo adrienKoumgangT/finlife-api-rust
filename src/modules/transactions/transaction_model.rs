@@ -83,3 +83,20 @@ impl From<TransactionCreateCommand> for Transaction {
         }
     }
 }
+
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct MonthlyFlow {
+    pub month: Option<String>,       // e.g., "2025-04"
+    pub total_income: i64,   // Minor units
+    pub total_expense: i64,  // Minor units
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct MonthlyCategoryExpense {
+    pub month: Option<String>,
+    pub category_id: Option<Uuid>,
+    pub total_amount: i64,
+}
+
+

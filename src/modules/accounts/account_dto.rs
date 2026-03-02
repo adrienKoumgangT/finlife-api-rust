@@ -8,7 +8,6 @@ use crate::modules::accounts::account_model::{Account, AccountType};
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AccountResponse {
     pub account_id: Uuid,
-    pub user_id: Uuid,
 
     pub name: String,
     pub account_type: AccountType,
@@ -24,7 +23,6 @@ impl From<Account> for AccountResponse {
     fn from(account: Account) -> Self {
         Self {
             account_id: account.id.unwrap(),
-            user_id: account.user_id,
             name: account.name,
             account_type: account.account_type,
             currency_code: account.currency_code,

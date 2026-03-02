@@ -82,13 +82,13 @@ impl BudgetDeleteCommand {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BudgetListByUserCommand {
     pub user_id: Uuid,
-    pub pagination: Option<PaginationRequest>,
+    pub year: u32,
     pub auth_user: AuthUser,
 }
 
 impl BudgetListByUserCommand {
-    pub fn new(user_id: Uuid, pagination: Option<PaginationRequest>, auth_user: AuthUser) -> Self {
-        Self { user_id, pagination, auth_user }
+    pub fn new(user_id: Uuid, year: u32, auth_user: AuthUser) -> Self {
+        Self { user_id, year, auth_user }
     }
 }
 
@@ -120,9 +120,9 @@ pub struct BudgetEnvelopeCreateCommand {
 }
 
 impl BudgetEnvelopeCreateCommand {
-    pub fn new(request: BudgetEnvelopeCreateRequest, auth_user: AuthUser) -> Self {
+    pub fn new(budget_id: Uuid, request: BudgetEnvelopeCreateRequest, auth_user: AuthUser) -> Self {
         Self {
-            budget_id: request.budget_id,
+            budget_id,
             category_id: request.category_id,
             planned_base_minor: request.planned_base_minor,
             carryover_base_minor: request.carryover_base_minor,

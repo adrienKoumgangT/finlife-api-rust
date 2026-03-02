@@ -13,7 +13,7 @@ pub trait PeopleRepositoryInterface {
 
     async fn create(&self, people: People, user_id: Option<Uuid>) -> Result<People, Error>;
 
-    async fn update_image(&self, people_id: Uuid, image_url: Option<String>, user_id: Option<Uuid>) -> Result<Option<People>, Error>;
+    async fn update_image(&self, people_id: Uuid, image: Option<Uuid>, user_id: Option<Uuid>) -> Result<Option<People>, Error>;
 
     async fn update(&self, people_id: Uuid, name: String, email: Option<String>, phone: Option<String>, note: Option<String>, user_id: Option<Uuid>) -> Result<Option<People>, Error>;
 
@@ -49,7 +49,7 @@ impl PeopleRepositoryInterface for PeopleRepository {
             SELECT
                 id AS "id: _",
                 user_id AS "user_id: _",
-                name, email, phone, image_url, note,
+                name, email, phone, image AS "image: _", note,
                 archived AS "archived: bool",
                 created_at, updated_at
             FROM people
@@ -70,7 +70,7 @@ impl PeopleRepositoryInterface for PeopleRepository {
         sqlx::query!(
             r#"
             INSERT INTO people
-                (id, user_id, name, email, phone, image_url, note, archived)
+                (id, user_id, name, email, phone, image, note, archived)
             VALUES
                 (?, ?, ?, ?, ?, ?, ?, ?)
             "#,
@@ -79,7 +79,7 @@ impl PeopleRepositoryInterface for PeopleRepository {
             people.name,
             people.email,
             people.phone,
-            people.image_url,
+            people.image,
             people.note,
             people.archived
         )
@@ -90,10 +90,10 @@ impl PeopleRepositoryInterface for PeopleRepository {
         result.ok_or_else(|| Error::msg("Person not found after creation"))
     }
 
-    async fn update_image(&self, people_id: Uuid, image_url: Option<String>, user_id: Option<Uuid>) -> Result<Option<People>, Error> {
+    async fn update_image(&self, people_id: Uuid, image: Option<Uuid>, user_id: Option<Uuid>) -> Result<Option<People>, Error> {
         sqlx::query!(
-            "UPDATE people SET image_url = ? WHERE id = ? AND user_id = ?",
-            image_url,
+            "UPDATE people SET image = ? WHERE id = ? AND user_id = ?",
+            image,
             people_id,
             user_id
         )
@@ -141,7 +141,7 @@ impl PeopleRepositoryInterface for PeopleRepository {
             r#"
             SELECT
                 id AS "id: _", user_id AS "user_id: _",
-                name, email, phone, image_url, note,
+                name, email, phone, image AS "image: _", note,
                 archived AS "archived: bool",
                 created_at, updated_at
             FROM people
@@ -163,7 +163,7 @@ impl PeopleRepositoryInterface for PeopleRepository {
             r#"
             SELECT
                 id AS "id: _", user_id AS "user_id: _",
-                name, email, phone, image_url, note,
+                name, email, phone, image AS "image: _", note,
                 archived AS "archived: bool",
                 created_at, updated_at
             FROM people

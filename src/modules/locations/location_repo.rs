@@ -14,7 +14,7 @@ pub trait LocationRepositoryInterface {
 
     async fn create(&self, location: Location, user_id: Option<Uuid>) -> Result<Location, Error>;
     
-    async fn update(&self, location_id: Uuid, name: String, address: Option<String>, city: Option<String>, region: Option<String>, postal_code: Option<String>, country_code: Option<String>, user_id: Option<Uuid>) -> Result<Option<Location>, Error>;
+    async fn update(&self, location_id: Uuid, name: String, address: Option<String>, city: Option<String>, district: Option<String>, region: Option<String>, postal_code: Option<String>, country_code: Option<String>, user_id: Option<Uuid>) -> Result<Option<Location>, Error>;
 
     async fn update_lat_long(&self, location_id: Uuid, latitude: Option<Decimal>, longitude: Option<Decimal>, user_id: Option<Uuid>) -> Result<Option<Location>, Error>;
 
@@ -48,7 +48,7 @@ impl LocationRepositoryInterface for LocationRepository {
             r#"
             SELECT
                 id AS "id: _", user_id AS "user_id: _",
-                name, address, city, region, postal_code, country_code,
+                name, address, city, district, region, postal_code, country_code,
                 latitude, longitude,
                 archived AS "archived: bool",
                 created_at, updated_at
@@ -70,15 +70,16 @@ impl LocationRepositoryInterface for LocationRepository {
         sqlx::query!(
             r#"
             INSERT INTO locations
-                (id, user_id, name, address, city, region, postal_code, country_code, latitude, longitude, archived)
+                (id, user_id, name, address, city, district, region, postal_code, country_code, latitude, longitude, archived)
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
             new_id,
             location.user_id,
             location.name,
             location.address,
             location.city,
+            location.district,
             location.region,
             location.postal_code,
             location.country_code,
@@ -93,10 +94,10 @@ impl LocationRepositoryInterface for LocationRepository {
         result.ok_or_else(|| Error::msg("Location not found after creation"))
     }
 
-    async fn update(&self, location_id: Uuid, name: String, address: Option<String>, city: Option<String>, region: Option<String>, postal_code: Option<String>, country_code: Option<String>, user_id: Option<Uuid>) -> Result<Option<Location>, Error> {
+    async fn update(&self, location_id: Uuid, name: String, address: Option<String>, city: Option<String>, district: Option<String>, region: Option<String>, postal_code: Option<String>, country_code: Option<String>, user_id: Option<Uuid>) -> Result<Option<Location>, Error> {
         sqlx::query!(
-            "UPDATE locations SET name = ?, address = ?, city = ?, region = ?, postal_code = ?, country_code = ? WHERE id = ? AND user_id = ?",
-            name, address, city, region, postal_code, country_code, location_id, user_id
+            "UPDATE locations SET name = ?, address = ?, city = ?, district = ?, region = ?, postal_code = ?, country_code = ? WHERE id = ? AND user_id = ?",
+            name, address, city, district, region, postal_code, country_code, location_id, user_id
         )
             .execute(&self.pool)
             .await?;
@@ -146,7 +147,7 @@ impl LocationRepositoryInterface for LocationRepository {
             r#"
             SELECT
                 id AS "id: _", user_id AS "user_id: _",
-                name, address, city, region, postal_code, country_code,
+                name, address, city, district, region, postal_code, country_code,
                 latitude, longitude,
                 archived AS "archived: bool",
                 created_at, updated_at
@@ -176,7 +177,7 @@ impl LocationRepositoryInterface for LocationRepository {
             r#"
             SELECT
                 id AS "id: _", user_id AS "user_id: _",
-                name, address, city, region, postal_code, country_code,
+                name, address, city, district, region, postal_code, country_code,
                 latitude, longitude,
                 archived AS "archived: bool",
                 created_at, updated_at

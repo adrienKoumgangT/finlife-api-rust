@@ -3,7 +3,7 @@ use utoipa::{IntoParams, ToSchema};
 
 
 /// A generic paginated request structure.
-#[derive(Debug, Serialize, Deserialize, ToSchema, IntoParams)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, IntoParams)]
 pub struct PaginationRequest {
     #[param(example = 1)]
     pub page: Option<u32>,

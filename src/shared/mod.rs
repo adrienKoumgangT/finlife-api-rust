@@ -15,3 +15,4 @@ pub mod openapi;
 pub mod utils;
 mod email;
 pub mod storage;
+pub mod model;

@@ -1,9 +1,10 @@
 use axum::{middleware, Router, routing::get, http::Method};
+use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, ACCEPT};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use tower_http::{
     trace::TraceLayer, 
-    cors::{Any, CorsLayer}, 
+    cors::{Any, CorsLayer, AllowHeaders},
     compression::CompressionLayer
 };
 
@@ -40,7 +41,9 @@ pub async fn build_app(cfg: AppConfig) -> anyhow::Result<App> {
     // CORS configuration
     let cors = CorsLayer::new()
         .allow_methods([Method::OPTIONS, Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers(Any)
+        // .allow_headers(Any)
+        // .allow_headers(AllowHeaders::list(vec![AUTHORIZATION, CONTENT_TYPE, ACCEPT]))
+        .allow_headers([AUTHORIZATION, CONTENT_TYPE, ACCEPT])
         .allow_origin(Any);
 
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())

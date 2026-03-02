@@ -43,9 +43,10 @@ pub struct PeopleService {
 
 impl From<&AppState> for PeopleService {
     fn from(app_state: &AppState) -> Self {
-        let people_repo = PeopleRepository::from(app_state);
-        let redis_pool = app_state.redis_pool.clone();
-        Self { people_repo, redis_pool: Option::from(redis_pool) }
+        Self {
+            people_repo: PeopleRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 
@@ -150,9 +151,10 @@ impl PeopleInterface for PeopleService {
         let meta_user = command.auth_user.user_id.clone();
         let person_create = People::from(command);
 
-        let person = self.people_repo.create(person_create, Some(meta_user)).await?;
+        let person = self.people_repo.create(person_create, Some(meta_user.clone())).await?;
         
         let person_response = PeopleResponse::from(person);
+        self.delete_cache(&person_response.people_id, &meta_user).await?;
         self.cache_person(&person_response).await?;
         
         Ok(person_response)
@@ -161,7 +163,7 @@ impl PeopleInterface for PeopleService {
     async fn update_image(&self, command: PeopleUpdateImageCommand) -> Result<Option<PeopleResponse>, AppError> {
         let meta_user = Some(command.auth_user.user_id.clone());
 
-        let person = self.people_repo.update_image(command.people_id, command.image_url, meta_user).await?;
+        let person = self.people_repo.update_image(command.people_id, command.image, meta_user).await?;
         self.handle_res_opt_person(person).await
     }
 

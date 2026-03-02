@@ -17,7 +17,7 @@ pub struct AppState {
     pub config: AppConfig,
     pub jwt: JwtVerifier,
     pub mysql_pool: MySqlPool,
-    pub redis_pool: Pool<RedisConnectionManager>,
+    pub redis_pool: Option<Pool<RedisConnectionManager>>,
     // pub metrics: Metrics,
     pub storage_provider: Arc<dyn StorageProvider>
 }
@@ -34,7 +34,11 @@ impl AppState {
 
         let jwt = JwtVerifier::new(&public_pem_content, &private_pem_content, config.jwt.issuer.as_str(), config.jwt.audience.as_str())?;
         let mysql_pool = my_mysql::connect(&config_clone.database.mysql.unwrap()).await?;
-        let redis_pool = my_redis::connect(&config_clone.database.redis.unwrap()).await?;
+        let redis_pool = if let Some(redis) = config_clone.database.redis {
+            Some(my_redis::connect(&redis).await?)
+        } else {
+            None
+        };
         // let metrics = Metrics::new();
 
         let storage_provider = S3StorageProvider::new(&config.storage).await;

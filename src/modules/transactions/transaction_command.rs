@@ -133,3 +133,46 @@ impl TransactionListByUserCommand {
         Self { user_id, pagination, auth_user }
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TransactionListFilterByUserCommand {
+    pub user_id: Uuid,
+    pub year: u32,
+    pub month: u32,
+    pub auth_user: AuthUser,
+}
+
+impl TransactionListFilterByUserCommand {
+    pub fn new(user_id: Uuid, year: u32, month: u32, auth_user: AuthUser) -> Self {
+        Self { user_id, year, month, auth_user }
+    }
+}
+
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TransactionListByCommand {
+    pub user_id: Uuid,
+    pub person_id: Uuid,
+    pub pagination: Option<PaginationRequest>,
+    pub auth_user: AuthUser,
+}
+
+impl TransactionListByCommand {
+    pub fn new(user_id: Uuid, person_id: Uuid, pagination: Option<PaginationRequest>, auth_user: AuthUser) -> Self {
+        Self { user_id, person_id, pagination, auth_user }
+    }
+}
+
+
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TransactionGetStatCommand {
+    pub user_id: Uuid,
+    pub auth_user: AuthUser,
+}
+
+impl TransactionGetStatCommand {
+    pub fn new(user_id: Uuid, auth_user: AuthUser) -> Self {
+        Self { user_id, auth_user }
+    }
+}

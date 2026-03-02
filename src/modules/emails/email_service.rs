@@ -56,7 +56,10 @@ pub struct EmailService {
 
 impl From<&AppState> for EmailService {
     fn from(app_state: &AppState) -> Self {
-        Self { email_repo: EmailRepository::from(app_state), redis_pool: Option::from(app_state.redis_pool.clone()) }
+        Self {
+            email_repo: EmailRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 

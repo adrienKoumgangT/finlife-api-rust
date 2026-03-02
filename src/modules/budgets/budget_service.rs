@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use bb8::Pool;
 use bb8_redis::RedisConnectionManager;
+use chrono::Datelike;
 use uuid::Uuid;
 
 use crate::modules::budgets::{
@@ -14,7 +15,6 @@ use crate::shared::{
     db::redis::{delete_key, get_key, set_key},
     errors::AppError,
     state::AppState,
-    utils::extract_pagination_data
 };
 
 #[async_trait]
@@ -54,9 +54,10 @@ pub struct BudgetService {
 
 impl From<&AppState> for BudgetService {
     fn from(app_state: &AppState) -> Self {
-        let budget_repo = BudgetRepository::from(app_state);
-        let redis_pool = app_state.redis_pool.clone();
-        Self { budget_repo, redis_pool: Option::from(redis_pool) }
+        Self {
+            budget_repo: BudgetRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 
@@ -65,7 +66,7 @@ impl BudgetService {
 
     // --- Redis Keys for Budgets ---
     fn form_redis_key_budget(&self, key: &Uuid) -> String { format!("budget:{}", key) }
-    fn form_redis_key_list_budgets_by_user(&self, user: &Uuid) -> String { format!("user:{}:budgets", user) }
+    fn form_redis_key_list_budgets_by_user(&self, user: &Uuid, year: &u32) -> String { format!("user:{}:budgets:year:{}", user, year) }
 
     // --- Redis Keys for Envelopes ---
     fn form_redis_key_envelope(&self, key: &Uuid) -> String { format!("envelope:{}", key) }
@@ -87,11 +88,11 @@ impl BudgetService {
         Ok(())
     }
 
-    async fn cache_budgets_by_user(&self, user_id: &Uuid, budgets: &Vec<BudgetResponse>) -> Result<(), AppError> {
+    async fn cache_budgets_by_user(&self, user_id: &Uuid, year: &u32, budgets: &Vec<BudgetResponse>) -> Result<(), AppError> {
         if let Some(redis_pool) = &self.redis_pool {
             let _: () = set_key(
                 redis_pool,
-                self.form_redis_key_list_budgets_by_user(user_id).as_str(),
+                self.form_redis_key_list_budgets_by_user(user_id, year).as_str(),
                 &budgets,
                 self.redis_key_ttl()
             ).await.map_err(AppError::Internal)?;
@@ -110,28 +111,41 @@ impl BudgetService {
         Ok(None)
     }
 
-    async fn delete_budget_cache(&self, budget_id: &Uuid, user_id: &Uuid) -> Result<(), AppError> {
+    async fn get_cache_list_budgets_by_user(&self, user_id: &Uuid, year: &u32) -> Result<Option<Vec<BudgetResponse>>, AppError> {
+        if let Some(redis_pool) = &self.redis_pool {
+            let cache: Option<Vec<BudgetResponse>> = get_key(
+                redis_pool, self.form_redis_key_list_budgets_by_user(user_id, year).as_str()
+            ).await.map_err(AppError::Internal)?;
+
+            return Ok(cache);
+        }
+        Ok(None)
+    }
+
+    async fn delete_budget_cache(&self, budget_id: &Uuid, user_id: &Uuid, year: &u32) -> Result<(), AppError> {
         if let Some(redis_pool) = &self.redis_pool {
             let _: () = delete_key(redis_pool, self.form_redis_key_budget(budget_id).as_str()).await
                 .map_err(AppError::Internal)?;
-            let _: () = delete_key(redis_pool, self.form_redis_key_list_budgets_by_user(user_id).as_str()).await
+            let _: () = delete_key(redis_pool, self.form_redis_key_list_budgets_by_user(user_id, year).as_str()).await
                 .map_err(AppError::Internal)?;
         }
         Ok(())
     }
 
-    async fn handle_res_opt_budget(&self, budget: anyhow::Result<Option<Budget>>) -> Result<Option<BudgetResponse>, AppError> {
-        let budget = budget.map_err(AppError::Internal)?;
+    async fn delete_list_budget_cache(&self, user_id: &Uuid, year: &u32) -> Result<(), AppError> {
+        if let Some(redis_pool) = &self.redis_pool {
+            let _: () = delete_key(redis_pool, self.form_redis_key_list_budgets_by_user(user_id, year).as_str()).await
+                .map_err(AppError::Internal)?;
+        }
 
+        Ok(())
+    }
+
+    async fn handle_res_opt_budget(&self, budget: Option<Budget>, user: &Uuid) -> Result<Option<BudgetResponse>, AppError> {
         if let Some(b) = budget {
             let response = BudgetResponse::from(b);
             self.cache_budget(&response).await?;
-
-            // Invalidate the budget list cache for this user
-            if let Some(redis_pool) = &self.redis_pool {
-                let _: () = delete_key(redis_pool, self.form_redis_key_list_budgets_by_user(&response.user_id).as_str()).await
-                    .map_err(AppError::Internal)?;
-            }
+            self.delete_list_budget_cache(user, &(response.month.year() as u32)).await?;
 
             Ok(Some(response))
         } else {
@@ -178,6 +192,17 @@ impl BudgetService {
         Ok(None)
     }
 
+    async fn get_cache_envelopes_by_budget(&self, budget_id: &Uuid) -> Result<Option<Vec<BudgetEnvelopeResponse>>, AppError> {
+        if let Some(redis_pool) = &self.redis_pool {
+            let cache: Option<Vec<BudgetEnvelopeResponse>> = get_key(
+                redis_pool, self.form_redis_key_list_envelopes_by_budget(budget_id).as_str()
+            ).await.map_err(AppError::Internal)?;
+            return Ok(cache);
+        }
+
+        Ok(None)
+    }
+
     async fn delete_envelope_cache(&self, envelope_id: &Uuid, budget_id: &Uuid) -> Result<(), AppError> {
         if let Some(redis_pool) = &self.redis_pool {
             let _: () = delete_key(redis_pool, self.form_redis_key_envelope(envelope_id).as_str()).await
@@ -188,18 +213,22 @@ impl BudgetService {
         Ok(())
     }
 
+    async fn delete_list_envelopes_by_budget(&self, budget_id: &Uuid) -> Result<(), AppError> {
+        if let Some(redis_pool) = &self.redis_pool {
+            let _: () = delete_key(redis_pool, self.form_redis_key_list_envelopes_by_budget(budget_id).as_str()).await
+                .map_err(AppError::Internal)?;
+        }
+
+        Ok(())
+    }
+
     async fn handle_res_opt_envelope(&self, envelope: anyhow::Result<Option<BudgetEnvelope>>) -> Result<Option<BudgetEnvelopeResponse>, AppError> {
         let envelope = envelope.map_err(AppError::Internal)?;
 
         if let Some(e) = envelope {
             let response = BudgetEnvelopeResponse::from(e);
             self.cache_envelope(&response).await?;
-
-            // Invalidate the envelope list cache for this specific budget
-            if let Some(redis_pool) = &self.redis_pool {
-                let _: () = delete_key(redis_pool, self.form_redis_key_list_envelopes_by_budget(&response.budget_id).as_str()).await
-                    .map_err(AppError::Internal)?;
-            }
+            self.delete_list_envelopes_by_budget(&response.budget_id).await?;
 
             Ok(Some(response))
         } else {
@@ -220,24 +249,20 @@ impl BudgetInterface for BudgetService {
             return Ok(Some(budget));
         }
 
-        let budget = self.budget_repo.get_budget(command.budget_id, Some(command.auth_user.user_id)).await;
-        self.handle_res_opt_budget(budget).await
+        let budget = self.budget_repo.get_budget(command.budget_id, command.auth_user.user_id).await?;
+        self.handle_res_opt_budget(budget, &command.auth_user.user_id).await
     }
 
     async fn create_budget(&self, command: BudgetCreateCommand) -> Result<BudgetResponse, AppError> {
         let meta_user = command.auth_user.user_id.clone();
         let budget_create = Budget::from(command);
 
-        let budget = self.budget_repo.create_budget(budget_create, Some(meta_user)).await
+        let budget = self.budget_repo.create_budget(budget_create, meta_user).await
             .map_err(AppError::Internal)?;
         let response = BudgetResponse::from(budget);
 
         self.cache_budget(&response).await?;
-
-        if let Some(redis_pool) = &self.redis_pool {
-            let _: () = delete_key(redis_pool, self.form_redis_key_list_budgets_by_user(&meta_user).as_str()).await
-                .map_err(AppError::Internal)?;
-        }
+        self.delete_list_budget_cache(&meta_user, &(response.month.year() as u32)).await?;
 
         Ok(response)
     }
@@ -245,41 +270,32 @@ impl BudgetInterface for BudgetService {
     async fn update_budget(&self, command: BudgetUpdateCommand) -> Result<Option<BudgetResponse>, AppError> {
         let budget = self.budget_repo.update_budget(
             command.budget_id, command.base_currency_code, command.person_id,
-            command.status, Some(command.auth_user.user_id)
-        ).await;
+            command.status, command.auth_user.user_id
+        ).await?;
 
-        self.handle_res_opt_budget(budget).await
+        self.handle_res_opt_budget(budget, &command.auth_user.user_id).await
     }
 
     async fn delete_budget(&self, command: BudgetDeleteCommand) -> Result<(), AppError> {
-        let budget_opt = self.budget_repo.get_budget(command.budget_id.clone(), Some(command.auth_user.user_id.clone())).await
+        let budget_opt = self.budget_repo.get_budget(command.budget_id.clone(), command.auth_user.user_id.clone()).await
             .map_err(AppError::Internal)?;
 
         if let Some(budget) = budget_opt {
-            self.budget_repo.delete_budget(command.budget_id.clone(), Some(command.auth_user.user_id)).await
+            self.budget_repo.delete_budget(command.budget_id.clone(), command.auth_user.user_id).await
                 .map_err(AppError::Internal)?;
-            self.delete_budget_cache(&command.budget_id, &budget.user_id).await?;
+            self.delete_budget_cache(&command.budget_id, &budget.user_id, &(budget.month.year() as u32)).await?;
         }
         Ok(())
     }
 
     async fn get_budgets_by_user(&self, command: BudgetListByUserCommand) -> Result<Vec<BudgetResponse>, AppError> {
-        let (limit, offset, _search) = extract_pagination_data(command.pagination);
+        if let Some(budgets) = self.get_cache_list_budgets_by_user(&command.user_id, &command.year).await? { return Ok(budgets); }
 
-        if let Some(redis_pool) = &self.redis_pool {
-            let cache: Option<Vec<BudgetResponse>> = get_key(
-                redis_pool, self.form_redis_key_list_budgets_by_user(&command.user_id).as_str()
-            ).await.map_err(AppError::Internal)?;
-
-            if let Some(budgets) = cache { return Ok(budgets); }
-        }
-
-        let budgets = self.budget_repo.get_budgets_by_user(
-            command.user_id, limit, offset
-        ).await.map_err(AppError::Internal)?;
+        let budgets = self.budget_repo.get_budgets_by_user(command.user_id, command.year).await
+            .map_err(AppError::Internal)?;
 
         let response: Vec<BudgetResponse> = budgets.into_iter().map(BudgetResponse::from).collect();
-        self.cache_budgets_by_user(&command.user_id, &response).await?;
+        self.cache_budgets_by_user(&command.user_id, &command.year, &response).await?;
 
         Ok(response)
     }
@@ -293,7 +309,7 @@ impl BudgetInterface for BudgetService {
             return Ok(Some(envelope));
         }
 
-        let envelope = self.budget_repo.get_envelope(command.envelope_id, Some(command.auth_user.user_id)).await;
+        let envelope = self.budget_repo.get_envelope(command.envelope_id, command.auth_user.user_id).await;
         self.handle_res_opt_envelope(envelope).await
     }
 
@@ -301,17 +317,12 @@ impl BudgetInterface for BudgetService {
         let meta_user = command.auth_user.user_id.clone();
         let envelope_create = BudgetEnvelope::from(command);
 
-        // Ownership of the budget is validated within the repo!
-        let envelope = self.budget_repo.create_envelope(envelope_create, Some(meta_user)).await
+        let envelope = self.budget_repo.create_envelope(envelope_create, meta_user).await
             .map_err(AppError::Internal)?;
         let response = BudgetEnvelopeResponse::from(envelope);
 
         self.cache_envelope(&response).await?;
-
-        if let Some(redis_pool) = &self.redis_pool {
-            let _: () = delete_key(redis_pool, self.form_redis_key_list_envelopes_by_budget(&response.budget_id).as_str()).await
-                .map_err(AppError::Internal)?;
-        }
+        self.delete_list_envelopes_by_budget(&response.budget_id).await?;
 
         Ok(response)
     }
@@ -319,18 +330,18 @@ impl BudgetInterface for BudgetService {
     async fn update_envelope(&self, command: BudgetEnvelopeUpdateCommand) -> Result<Option<BudgetEnvelopeResponse>, AppError> {
         let envelope = self.budget_repo.update_envelope(
             command.envelope_id, command.planned_base_minor, command.carryover_base_minor,
-            command.rollover_rule, Some(command.auth_user.user_id)
+            command.rollover_rule, command.auth_user.user_id
         ).await;
 
         self.handle_res_opt_envelope(envelope).await
     }
 
     async fn delete_envelope(&self, command: BudgetEnvelopeDeleteCommand) -> Result<(), AppError> {
-        let envelope_opt = self.budget_repo.get_envelope(command.envelope_id.clone(), Some(command.auth_user.user_id.clone())).await
+        let envelope_opt = self.budget_repo.get_envelope(command.envelope_id.clone(), command.auth_user.user_id.clone()).await
             .map_err(AppError::Internal)?;
 
         if let Some(envelope) = envelope_opt {
-            self.budget_repo.delete_envelope(command.envelope_id.clone(), Some(command.auth_user.user_id)).await
+            self.budget_repo.delete_envelope(command.envelope_id.clone(), command.auth_user.user_id).await
                 .map_err(AppError::Internal)?;
             self.delete_envelope_cache(&command.envelope_id, &envelope.budget_id).await?;
         }
@@ -338,19 +349,11 @@ impl BudgetInterface for BudgetService {
     }
 
     async fn get_envelopes_by_budget(&self, command: BudgetEnvelopeListByBudgetCommand) -> Result<Vec<BudgetEnvelopeResponse>, AppError> {
-        let (limit, offset, _search) = extract_pagination_data(command.pagination);
+        let cache = self.get_cache_envelopes_by_budget(&command.budget_id).await?;
+        if let Some(envelopes) = cache { return Ok(envelopes); }
 
-        if let Some(redis_pool) = &self.redis_pool {
-            let cache: Option<Vec<BudgetEnvelopeResponse>> = get_key(
-                redis_pool, self.form_redis_key_list_envelopes_by_budget(&command.budget_id).as_str()
-            ).await.map_err(AppError::Internal)?;
-
-            if let Some(envelopes) = cache { return Ok(envelopes); }
-        }
-
-        let envelopes = self.budget_repo.get_envelopes_by_budget(
-            command.budget_id, limit, offset, Some(command.auth_user.user_id)
-        ).await.map_err(AppError::Internal)?;
+        let envelopes = self.budget_repo.get_envelopes_by_budget(command.budget_id, command.auth_user.user_id).await
+            .map_err(AppError::Internal)?;
 
         let response: Vec<BudgetEnvelopeResponse> = envelopes.into_iter().map(BudgetEnvelopeResponse::from).collect();
         self.cache_envelopes_by_budget(&command.budget_id, &response).await?;

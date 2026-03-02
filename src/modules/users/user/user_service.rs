@@ -48,8 +48,10 @@ pub struct UserService {
 
 impl From<&AppState> for UserService {
     fn from(app_state: &AppState) -> Self {
-        let user_repo = UserRepository::from(app_state);
-        Self { user_repo, redis_pool: Option::from(app_state.redis_pool.clone()) }
+        Self {
+            user_repo: UserRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 

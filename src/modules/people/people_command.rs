@@ -26,7 +26,7 @@ pub struct PeopleCreateCommand {
 
     pub email: Option<String>,
     pub phone: Option<String>,
-    pub image_url: Option<String>,
+    pub image: Option<Uuid>,
     pub note: Option<String>,
 
     pub auth_user: AuthUser,
@@ -39,7 +39,7 @@ impl PeopleCreateCommand {
             name: request.name,
             email: request.email,
             phone: request.phone,
-            image_url: request.image_url,
+            image: request.image,
             note: request.note,
             auth_user,
         }
@@ -49,7 +49,7 @@ impl PeopleCreateCommand {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PeopleUpdateImageCommand {
     pub people_id: Uuid,
-    pub image_url: Option<String>,
+    pub image: Option<Uuid>,
 
     pub auth_user: AuthUser,
 }

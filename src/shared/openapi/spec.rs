@@ -26,12 +26,14 @@ use crate::modules::{
     reviews::{
         sessions::{review_session_controller, review_session_dto},
     },
+    tags::{tag_controller, tag_dto},
     transactions::{transaction_controller, transaction_dto},
     users::{
         auth::{auth_controller, auth_dto},
         user::{user_controller, user_dto}
     }
 };
+use crate::shared::response;
 
 struct SecurityAddon;
 
@@ -76,6 +78,7 @@ impl Modify for SecurityAddon {
         (name = "People", description = "People API endpoints"),
         (name = "Project", description = "Project API endpoints"),
         (name = "Review Session", description = "Review Session API endpoints"),
+        (name = "Tag", description = "Tag API endpoints"),
         (name = "Transaction", description = "Transaction API endpoints"),
         (name = "User", description = "User Manager API endpoints"),
     ),
@@ -91,7 +94,7 @@ impl Modify for SecurityAddon {
         auth_controller::request_password_reset, auth_controller::confirm_password_reset,
         auth_controller::request_email_verification, auth_controller::confirm_email_verification,
 
-        budget_controller::get_budgets, budget_controller::post_budget,
+        budget_controller::get_budgets, budget_controller::get_budgets_by_year, budget_controller::post_budget,
         budget_controller::get_budget, budget_controller::put_budget, budget_controller::delete_budget,
 
         budget_controller::get_envelopes, budget_controller::post_envelope,
@@ -164,8 +167,21 @@ impl Modify for SecurityAddon {
         review_session_controller::get_reviews, review_session_controller::create_review,
         review_session_controller::get_review, review_session_controller::update_review, review_session_controller::delete_review,
 
+        tag_controller::get_tags, tag_controller::post_tag,
+        tag_controller::get_tag, tag_controller::delete_tag,
+
         transaction_controller::get_transactions, transaction_controller::post_transaction,
         transaction_controller::get_transaction, transaction_controller::put_transaction, transaction_controller::delete_transaction,
+        transaction_controller::get_transaction_filter,
+        transaction_controller::get_transactions_by_account,
+        transaction_controller::get_transactions_by_category,
+        transaction_controller::get_transactions_by_payee,
+        transaction_controller::get_transactions_by_person,
+        transaction_controller::get_transactions_by_location,
+        transaction_controller::get_transactions_by_project,
+        transaction_controller::get_transactions_by_goal,
+        transaction_controller::get_transactions_months_cash_flow,
+        transaction_controller::get_transactions_months_category_expenses,
 
         user_controller::get_users, user_controller::post_user,
         user_controller::get_user, user_controller::put_user, user_controller::delete_user,
@@ -223,10 +239,15 @@ impl Modify for SecurityAddon {
 
             review_session_dto::ReviewSessionResponse, review_session_dto::ReviewSessionCreateRequest, review_session_dto::ReviewSessionUpdateRequest,
 
+            tag_dto::TagResponse, tag_dto::TagCreateRequest,  tag_dto::TagSearchRequest,
+
             transaction_dto::TransactionResponse, transaction_dto::TransactionCreateRequest, transaction_dto::TransactionUpdateRequest,
+            transaction_dto::MonthlyFlowResponse, transaction_dto::MonthlyCategoryExpenseResponse,
 
             user_dto::UserResponse,
             user_dto::UserCreateRequest, user_dto::UserUpdateNameRequest, user_dto::UserUpdateBaseCurrencyRequest,
+
+            response::PaginationRequest
         ),
     ),
     security(

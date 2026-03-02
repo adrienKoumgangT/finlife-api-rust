@@ -44,9 +44,10 @@ pub struct LocationService {
 
 impl From<&AppState> for LocationService {
     fn from(app_state: &AppState) -> Self {
-        let location_repo = LocationRepository::from(app_state);
-        let redis_pool = app_state.redis_pool.clone();
-        Self { location_repo, redis_pool: Option::from(redis_pool) }
+        Self {
+            location_repo: LocationRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 
@@ -138,10 +139,11 @@ impl LocationInterface for LocationService {
         let meta_user = command.auth_user.user_id.clone();
         let location_create = Location::from(command);
 
-        let location = self.location_repo.create(location_create, Some(meta_user)).await
+        let location = self.location_repo.create(location_create, Some(meta_user.clone())).await
             .map_err(AppError::Internal)?;
         let response = LocationResponse::from(location);
 
+        self.delete_cache(&response.location_id, &meta_user).await?;
         self.cache_location(&response).await?;
 
         if let Some(redis_pool) = &self.redis_pool {
@@ -153,26 +155,43 @@ impl LocationInterface for LocationService {
     }
 
     async fn update(&self, command: LocationUpdateCommand) -> Result<Option<LocationResponse>, AppError> {
+        let location_id = command.location_id.clone();
+        let meta_user = command.auth_user.user_id.clone();
+
         let location = self.location_repo.update(
             command.location_id, command.name, command.address,
-            command.city, command.region, command.postal_code,
+            command.city, command.district, command.region, command.postal_code,
             command.country_code, Some(command.auth_user.user_id)
         ).await;
+
+        self.delete_cache(&location_id, &meta_user).await?;
 
         self.handle_res_opt_location(location, &command.auth_user.user_id).await
     }
 
     async fn update_lat_long(&self, command: LocationUpdateLatLongCommand) -> Result<Option<LocationResponse>, AppError> {
+        let location_id = command.location_id.clone();
+        let meta_user = command.auth_user.user_id.clone();
+
         let location = self.location_repo.update_lat_long(
             command.location_id, command.latitude, command.longitude, Some(command.auth_user.user_id)
         ).await;
+
+        self.delete_cache(&location_id, &meta_user).await?;
+
         self.handle_res_opt_location(location, &command.auth_user.user_id).await
     }
 
     async fn archived(&self, command: LocationArchivedCommand) -> Result<Option<LocationResponse>, AppError> {
+        let location_id = command.location_id.clone();
+        let meta_user = command.auth_user.user_id.clone();
+
         let location = self.location_repo.archived(
             command.location_id, command.archived, Some(command.auth_user.user_id)
         ).await;
+
+        self.delete_cache(&location_id, &meta_user).await?;
+
         self.handle_res_opt_location(location, &command.auth_user.user_id).await
     }
 

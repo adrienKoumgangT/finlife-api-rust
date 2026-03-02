@@ -40,9 +40,10 @@ pub struct ProjectTaskService {
 
 impl From<&AppState> for ProjectTaskService {
     fn from(app_state: &AppState) -> Self {
-        let task_repo = ProjectTaskRepository::from(app_state);
-        let redis_pool = app_state.redis_pool.clone();
-        Self { task_repo, redis_pool: Option::from(redis_pool) }
+        Self {
+            task_repo: ProjectTaskRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 

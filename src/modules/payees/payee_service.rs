@@ -41,9 +41,10 @@ pub struct PayeeService {
 
 impl From<&AppState> for PayeeService {
     fn from(app_state: &AppState) -> Self {
-        let payee_repo = PayeeRepository::from(app_state);
-        let redis_pool = app_state.redis_pool.clone();
-        Self { payee_repo, redis_pool: Option::from(redis_pool) }
+        Self {
+            payee_repo: PayeeRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 

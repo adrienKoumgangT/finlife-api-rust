@@ -1819,6 +1819,7 @@ dependencies = [
  "config",
  "dotenvy",
  "hex",
+ "http 0.2.12",
  "jsonwebtoken",
  "lazy_static",
  "lettre",

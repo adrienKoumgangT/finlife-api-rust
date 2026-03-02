@@ -54,9 +54,10 @@ pub struct NotificationService {
 
 impl From<&AppState> for NotificationService {
     fn from(app_state: &AppState) -> Self {
-        let notif_repo = NotificationRepository::from(app_state);
-        let redis_pool = app_state.redis_pool.clone();
-        Self { notif_repo, redis_pool: Option::from(redis_pool) }
+        Self {
+            notif_repo: NotificationRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 

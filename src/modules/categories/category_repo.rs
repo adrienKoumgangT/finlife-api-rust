@@ -9,17 +9,17 @@ use crate::shared::state::AppState;
 #[async_trait]
 pub trait CategoryRepositoryInterface {
 
-    async fn get(&self, category_id: Uuid, user_id: Option<Uuid>) -> Result<Option<Category>, Error>;
+    async fn get(&self, category_id: Uuid, user_id: Uuid) -> Result<Option<Category>, Error>;
 
-    async fn create(&self, category: Category, user_id: Option<Uuid>) -> Result<Category, Error>;
+    async fn create(&self, category: Category, user_id: Uuid) -> Result<Category, Error>;
 
-    async fn update(&self, category_id: Uuid, name: String, parent_id: Option<Uuid>, sort_order: i32, user_id: Option<Uuid>) -> Result<Option<Category>, Error>;
+    async fn update(&self, category_id: Uuid, name: String, parent_id: Option<Uuid>, sort_order: i32, user_id: Uuid) -> Result<Option<Category>, Error>;
 
-    async fn archived(&self, category_id: Uuid, archived: bool, user_id: Option<Uuid>) -> Result<Option<Category>, Error>;
+    async fn archived(&self, category_id: Uuid, archived: bool, user_id: Uuid) -> Result<Option<Category>, Error>;
 
-    async fn delete(&self, category_id: Uuid, user_id: Option<Uuid>) -> Result<(), Error>;
+    async fn delete(&self, category_id: Uuid, user_id: Uuid) -> Result<(), Error>;
 
-    async fn get_by_user(&self, user_id: Uuid, limit: Option<u32>, offset: Option<u32>) -> Result<Vec<Category>, Error>;
+    async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<Category>, Error>;
 
 }
 
@@ -37,7 +37,7 @@ impl From<&AppState> for CategoryRepository {
 #[async_trait]
 impl CategoryRepositoryInterface for CategoryRepository {
 
-    async fn get(&self, category_id: Uuid, user_id: Option<Uuid>) -> Result<Option<Category>, Error> {
+    async fn get(&self, category_id: Uuid, user_id: Uuid) -> Result<Option<Category>, Error> {
         let category = sqlx::query_as!(
             Category,
             r#"
@@ -58,7 +58,7 @@ impl CategoryRepositoryInterface for CategoryRepository {
         Ok(category)
     }
 
-    async fn create(&self, category: Category, user_id: Option<Uuid>) -> Result<Category, Error> {
+    async fn create(&self, category: Category, user_id: Uuid) -> Result<Category, Error> {
         let new_id = Uuid::new_v4();
         let kind_str = category.kind.as_str();
 
@@ -84,7 +84,7 @@ impl CategoryRepositoryInterface for CategoryRepository {
         result.ok_or_else(|| Error::msg("Category not found after creation"))
     }
 
-    async fn update(&self, category_id: Uuid, name: String, parent_id: Option<Uuid>, sort_order: i32, user_id: Option<Uuid>) -> Result<Option<Category>, Error> {
+    async fn update(&self, category_id: Uuid, name: String, parent_id: Option<Uuid>, sort_order: i32, user_id: Uuid) -> Result<Option<Category>, Error> {
         sqlx::query!(
             "UPDATE categories SET name = ?, parent_id = ?, sort_order = ? WHERE id = ? AND user_id = ?",
             name, parent_id, sort_order, category_id, user_id
@@ -95,7 +95,7 @@ impl CategoryRepositoryInterface for CategoryRepository {
         self.get(category_id, user_id).await
     }
 
-    async fn archived(&self, category_id: Uuid, archived: bool, user_id: Option<Uuid>) -> Result<Option<Category>, Error> {
+    async fn archived(&self, category_id: Uuid, archived: bool, user_id: Uuid) -> Result<Option<Category>, Error> {
         sqlx::query!(
             "UPDATE categories SET archived = ? WHERE id = ? AND user_id = ?",
             archived,
@@ -108,7 +108,7 @@ impl CategoryRepositoryInterface for CategoryRepository {
         self.get(category_id, user_id).await
     }
 
-    async fn delete(&self, category_id: Uuid, user_id: Option<Uuid>) -> Result<(), Error> {
+    async fn delete(&self, category_id: Uuid, user_id: Uuid) -> Result<(), Error> {
         sqlx::query!("DELETE FROM categories WHERE id = ? AND user_id = ?", category_id, user_id)
             .execute(&self.pool)
             .await?;
@@ -116,10 +116,7 @@ impl CategoryRepositoryInterface for CategoryRepository {
         Ok(())
     }
 
-    async fn get_by_user(&self, user_id: Uuid, limit: Option<u32>, offset: Option<u32>) -> Result<Vec<Category>, Error> {
-        let limit_val = limit.unwrap_or(100) as i64;
-        let offset_val = offset.unwrap_or(0) as i64;
-
+    async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<Category>, Error> {
         let categories = sqlx::query_as!(
             Category,
             r#"
@@ -131,11 +128,8 @@ impl CategoryRepositoryInterface for CategoryRepository {
             FROM categories
             WHERE user_id = ?
             ORDER BY sort_order ASC, created_at DESC
-            LIMIT ? OFFSET ?
             "#,
             user_id,
-            limit_val,
-            offset_val
         )
             .fetch_all(&self.pool)
             .await?;

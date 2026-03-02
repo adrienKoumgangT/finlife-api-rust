@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::modules::transactions::transaction_model::{Transaction, TransactionStatus};
+use crate::modules::transactions::transaction_model::{MonthlyCategoryExpense, MonthlyFlow, Transaction, TransactionStatus};
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct TransactionResponse {
@@ -102,3 +102,65 @@ pub struct TransactionUpdateRequest {
 
     pub status: TransactionStatus,
 }
+
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MonthlyFlowResponse {
+    pub year: u32,
+    pub month: u32,
+    pub total_income: i64,
+    pub total_expense: i64,
+}
+
+impl From<MonthlyFlow> for MonthlyFlowResponse {
+    fn from(flow: MonthlyFlow) -> Self {
+        let mut year = 0;
+        let mut month = 0;
+
+        if let Some(month_str) = flow.month {
+            let parts: Vec<&str> = month_str.split('-').collect();
+            if parts.len() == 2 {
+                year = parts[0].parse::<u32>().unwrap_or(0);
+                month = parts[1].parse::<u32>().unwrap_or(0);
+            }
+        }
+
+        MonthlyFlowResponse {
+            year,
+            month,
+            total_income: flow.total_income,
+            total_expense: flow.total_expense,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MonthlyCategoryExpenseResponse {
+    pub year: u32,
+    pub month: u32,
+    pub category_id: Option<Uuid>,
+    pub total_amount: i64,
+}
+
+impl From<MonthlyCategoryExpense> for MonthlyCategoryExpenseResponse {
+    fn from(flow: MonthlyCategoryExpense) -> Self {
+        let mut year = 0;
+        let mut month = 0;
+
+        if let Some(month_str) = flow.month {
+            let parts: Vec<&str> = month_str.split('-').collect();
+            if parts.len() == 2 {
+                year = parts[0].parse::<u32>().unwrap_or(0);
+                month = parts[1].parse::<u32>().unwrap_or(0);
+            }
+        }
+
+        MonthlyCategoryExpenseResponse {
+            year,
+            month,
+            category_id: flow.category_id,
+            total_amount: flow.total_amount,
+        }
+    }
+}
+

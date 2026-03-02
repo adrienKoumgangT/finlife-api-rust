@@ -54,13 +54,11 @@ pub struct AuthService {
 
 impl From<&AppState> for AuthService {
     fn from(app_state: &AppState) -> Self {
-        let auth_repo = AuthRepository::from(app_state);
-        let user_repo = UserRepository::from(app_state);
         Self {
             jwt: app_state.jwt.clone(),
-            auth_repo,
-            user_repo,
-            redis_pool: Option::from(app_state.redis_pool.clone())
+            auth_repo: AuthRepository::from(app_state),
+            user_repo: UserRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
         }
     }
 }

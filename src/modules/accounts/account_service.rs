@@ -14,7 +14,6 @@ use crate::shared::{
     db::redis::{delete_key, get_key, set_key},
     errors::AppError,
     state::AppState,
-    utils::extract_pagination_data
 };
 
 #[async_trait]
@@ -42,9 +41,10 @@ pub struct AccountService {
 
 impl From<&AppState> for AccountService {
     fn from(app_state: &AppState) -> Self {
-        let account_repo = AccountRepository::from(app_state);
-        let redis_pool = app_state.redis_pool.clone();
-        Self { account_repo, redis_pool: Option::from(redis_pool) }
+        Self {
+            account_repo: AccountRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 
@@ -90,24 +90,41 @@ impl AccountService {
         Ok(None)
     }
 
+    async fn get_cache_by_user(&self, user: &Uuid) -> Result<Option<Vec<AccountResponse>>, AppError> {
+        if let Some(redis_pool) = &self.redis_pool {
+            let cache: Option<Vec<AccountResponse>> = get_key(
+                &redis_pool, self.form_redis_key_list_by_user(user).as_str()
+            ).await.map_err(AppError::Internal)?;
+
+            return Ok(cache);
+        }
+
+        Ok(None)
+    }
+
     async fn delete_cache(&self, key: &Uuid, user: &Uuid) -> Result<(), AppError> {
         if let Some(redis_pool) = &self.redis_pool {
-            let _: () = delete_key(&redis_pool, self.form_redis_key_account(key).as_str()).await.map_err(AppError::Internal)?;
-            let _: () = delete_key(&redis_pool, self.form_redis_key_list_by_user(user).as_str()).await.map_err(AppError::Internal)?;
+            let _: () = delete_key(&redis_pool, self.form_redis_key_account(key).as_str()).await
+                .map_err(AppError::Internal)?;
+            let _: () = delete_key(&redis_pool, self.form_redis_key_list_by_user(user).as_str()).await
+                .map_err(AppError::Internal)?;
         }
         Ok(())
     }
 
-    async fn handle_res_opt_account(&self, account: anyhow::Result<Option<Account>>, auth_user: &Uuid) -> Result<Option<AccountResponse>, AppError> {
-        let account = account.map_err(AppError::Internal)?;
+    async fn delete_cache_list(&self, user: &Uuid) -> Result<(), AppError> {
+        if let Some(redis_pool) = &self.redis_pool {
+            let _: () = delete_key(&redis_pool, self.form_redis_key_list_by_user(user).as_str()).await
+                .map_err(AppError::Internal)?;
+        }
+        Ok(())
+    }
 
+    async fn handle_res_opt_account(&self, account: Option<Account>, user: &Uuid) -> Result<Option<AccountResponse>, AppError> {
         if let Some(acc) = account {
             let response = AccountResponse::from(acc);
             self.cache_account(&response).await?;
-
-            if let Some(redis_pool) = &self.redis_pool {
-                let _: () = delete_key(&redis_pool, self.form_redis_key_list_by_user(auth_user).as_str()).await.map_err(AppError::Internal)?;
-            }
+            self.delete_cache_list(user).await?;
 
             Ok(Some(response))
         } else {
@@ -124,7 +141,8 @@ impl AccountInterface for AccountService {
             return Ok(Some(account));
         }
 
-        let account = self.account_repo.get(command.account_id, Some(command.auth_user.user_id)).await;
+        let account = self.account_repo.get(command.account_id, command.auth_user.user_id).await?;
+
         self.handle_res_opt_account(account, &command.auth_user.user_id).await
     }
 
@@ -132,14 +150,12 @@ impl AccountInterface for AccountService {
         let meta_user = command.auth_user.user_id.clone();
         let account_create = Account::from(command);
 
-        let account = self.account_repo.create(account_create, Some(meta_user)).await.map_err(AppError::Internal)?;
+        let account = self.account_repo.create(account_create, meta_user).await
+            .map_err(AppError::Internal)?;
         let response = AccountResponse::from(account);
 
         self.cache_account(&response).await?;
-
-        if let Some(redis_pool) = &self.redis_pool {
-            let _: () = delete_key(&redis_pool, self.form_redis_key_list_by_user(&meta_user).as_str()).await.map_err(AppError::Internal)?;
-        }
+        self.delete_cache_list(&meta_user).await?;
 
         Ok(response)
     }
@@ -147,39 +163,35 @@ impl AccountInterface for AccountService {
     async fn update(&self, command: AccountUpdateCommand) -> Result<Option<AccountResponse>, AppError> {
         let account = self.account_repo.update(
             command.account_id, command.name, command.account_type,
-            command.institution, Some(command.auth_user.user_id)
-        ).await;
+            command.institution, command.auth_user.user_id
+        ).await?;
 
         self.handle_res_opt_account(account, &command.auth_user.user_id).await
     }
 
     async fn archived(&self, command: AccountArchivedCommand) -> Result<Option<AccountResponse>, AppError> {
         let account = self.account_repo.archived(
-            command.account_id, command.archived, Some(command.auth_user.user_id)
-        ).await;
+            command.account_id, command.archived, command.auth_user.user_id
+        ).await?;
+
         self.handle_res_opt_account(account, &command.auth_user.user_id).await
     }
 
     async fn delete(&self, command: AccountDeleteCommand) -> Result<(), AppError> {
-        self.account_repo.delete(command.account_id.clone(), Some(command.auth_user.user_id)).await.map_err(AppError::Internal)?;
+        self.account_repo.delete(command.account_id.clone(), command.auth_user.user_id).await
+            .map_err(AppError::Internal)?;
+
         self.delete_cache(&command.account_id, &command.auth_user.user_id).await?;
+
         Ok(())
     }
 
     async fn get_by_user(&self, command: AccountListByUserCommand) -> Result<Vec<AccountResponse>, AppError> {
-        let (limit, offset, _search) = extract_pagination_data(command.pagination);
+        let cache = self.get_cache_by_user(&command.user_id).await?;
+        if let Some(accounts) = cache { return Ok(accounts); }
 
-        if let Some(redis_pool) = &self.redis_pool {
-            let cache: Option<Vec<AccountResponse>> = get_key(
-                &redis_pool, self.form_redis_key_list_by_user(&command.user_id).as_str()
-            ).await.map_err(AppError::Internal)?;
-
-            if let Some(accounts) = cache { return Ok(accounts); }
-        }
-
-        let accounts = self.account_repo.get_by_user(
-            command.user_id, limit, offset
-        ).await.map_err(AppError::Internal)?;
+        let accounts = self.account_repo.get_by_user(command.user_id).await
+            .map_err(AppError::Internal)?;
 
         let response: Vec<AccountResponse> = accounts.into_iter().map(AccountResponse::from).collect();
         self.cache_accounts_by_user(&command.user_id, &response).await?;

@@ -121,7 +121,7 @@ CREATE TABLE people (
 
     email      VARCHAR(320) NULL,
     phone      VARCHAR(32) NULL,
-    image_url  VARCHAR(512) NULL,
+    image      BINARY(16) NULL,
     note       TEXT NULL,
 
     archived   TINYINT(1) NOT NULL DEFAULT 0,
@@ -146,6 +146,7 @@ CREATE TABLE locations (
 
     address      VARCHAR(255) NULL,
     city         VARCHAR(80) NULL,
+    district     VARCHAR(80) NULL,
     region       VARCHAR(80) NULL,
     postal_code  VARCHAR(24) NULL,
     country_code VARCHAR(3) NULL,          -- IT, FR, CM...
@@ -210,6 +211,21 @@ CREATE TABLE categories (
     CONSTRAINT fk_categories_parent
         FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- -----------------------------
+-- TAGS
+-- -----------------------------
+
+CREATE TABLE tags (
+    id         BINARY(16) PRIMARY KEY,
+    name       VARCHAR(255) NOT NULL,
+    user_id    BINARY(16) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_tags_user_name (user_id, name),
+    KEY idx_tags_user (user_id)
+);
 
 -- -----------------------------
 -- PAYEES (merchant/store/entity)
@@ -462,6 +478,18 @@ CREATE TABLE transactions (
     CONSTRAINT fk_tx_goal
         FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+CREATE TABLE transaction_tags (
+    transaction_id  BINARY(16) NOT NULL,
+    tag_id          BINARY(16) NOT NULL,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (transaction_id, tag_id),
+
+    FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
 
 
 -- -----------------------------

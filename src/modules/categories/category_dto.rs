@@ -8,7 +8,6 @@ use crate::modules::categories::category_model::{Category, CategoryKind};
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CategoryResponse {
     pub category_id: Uuid,
-    pub user_id: Uuid,
 
     pub name: String,
     pub kind: CategoryKind,
@@ -24,7 +23,6 @@ impl From<Category> for CategoryResponse {
     fn from(category: Category) -> Self {
         Self {
             category_id: category.id.unwrap(),
-            user_id: category.user_id,
             name: category.name,
             kind: category.kind,
             parent_id: category.parent_id,
@@ -40,7 +38,6 @@ impl From<&Category> for CategoryResponse {
     fn from(category: &Category) -> Self {
         Self {
             category_id: category.id.clone().unwrap(),
-            user_id: category.user_id.clone(),
             name: category.name.clone(),
             kind: category.kind.clone(),
             parent_id: category.parent_id.clone(),

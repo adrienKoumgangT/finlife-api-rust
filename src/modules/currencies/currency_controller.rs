@@ -55,7 +55,8 @@ pub async fn get_currencies(
     post,
     path = "/api/services/currencies",
     responses(
-        (status = StatusCode::CREATED, description = "Currency not created", body = CurrencyResponse),
+        (status = StatusCode::CREATED, description = "Currency created", body = CurrencyResponse),
+        (status = StatusCode::UNAUTHORIZED, description = "You are not admin"),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal Server Error")
     ),
     tag = "Currency"
@@ -65,6 +66,10 @@ pub async fn post_currency(
     auth_user: AuthUser,
     Json(currency_create_request): Json<CurrencyCreateRequest>,
 ) -> Result<Json<CurrencyResponse>, AppError> {
+    if !auth_user.role.is_admin() {
+        return Err(AppError::Unauthorized("You're not admin".to_string()));
+    }
+
     let command = CurrencyCreateCommand::new(currency_create_request, auth_user);
     let currency_service = CurrencyService::from(&state);
     
@@ -80,6 +85,7 @@ pub async fn post_currency(
     responses(
         (status = StatusCode::OK, description = "Currency name updated", body = CurrencyResponse),
         (status = StatusCode::NOT_FOUND, description = "Currency not found"),
+        (status = StatusCode::UNAUTHORIZED, description = "You are not admin"),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal Server Error")
     ),
     tag = "Currency"
@@ -89,6 +95,10 @@ pub async fn put_currency(
     auth_user: AuthUser,
     Json(currency_update_request): Json<CurrencyUpdateNameRequest>,
 ) -> Result<Json<CurrencyResponse>, AppError> {
+    if !auth_user.role.is_admin() {
+        return Err(AppError::Unauthorized("You're not admin".to_string()));
+    }
+
     let command = CurrencyUpdateNameCommand::new(currency_update_request, auth_user);
     let currency_service = CurrencyService::from(&state);
 
@@ -137,6 +147,7 @@ pub async fn get_currency(
     responses(
         (status = StatusCode::OK, description = "Currency name deleted"),
         (status = StatusCode::NOT_FOUND, description = "Currency not found"),
+        (status = StatusCode::UNAUTHORIZED, description = "You are not admin"),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal Server Error"),
     ),
     tag = "Currency"
@@ -146,6 +157,10 @@ pub async fn delete_currency(
     auth_user: AuthUser,
     Path(currency_code): Path<String>,
 ) -> Result<StatusCode, AppError> {
+    if !auth_user.role.is_admin() {
+        return Err(AppError::Unauthorized("You're not admin".to_string()));
+    }
+
     let command = CurrencyDeleteCommand::new(currency_code, auth_user);
     let currency_service = CurrencyService::from(&state);
     

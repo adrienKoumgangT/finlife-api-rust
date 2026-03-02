@@ -15,6 +15,7 @@ use crate::modules::{
     people::people_controller,
     projects::project_controller,
     reviews::review_route,
+    tags::tag_controller,
     transactions::transaction_controller,
     users::{
         auth::auth_controller,
@@ -40,6 +41,7 @@ pub fn routes() -> Router<AppState> {
         .nest("/people", people_controller::routes())
         .nest("/projects", project_controller::routes())
         .nest("/reviews", review_route::routes())
+        .nest("/tags", tag_controller::routes())
         .nest("/transactions", transaction_controller::routes())
         .nest("/users", user_controller::routes())
 }

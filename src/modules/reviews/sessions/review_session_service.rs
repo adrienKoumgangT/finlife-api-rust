@@ -40,9 +40,10 @@ pub struct ReviewSessionService {
 
 impl From<&AppState> for ReviewSessionService {
     fn from(app_state: &AppState) -> Self {
-        let review_repo = ReviewSessionRepository::from(app_state);
-        let redis_pool = app_state.redis_pool.clone();
-        Self { review_repo, redis_pool: Option::from(redis_pool) }
+        Self {
+            review_repo: ReviewSessionRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 

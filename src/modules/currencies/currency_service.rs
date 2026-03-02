@@ -58,9 +58,11 @@ pub struct CurrencyService {
 
 impl From<&AppState> for CurrencyService {
     fn from(app_state: &AppState) -> Self {
-        let currency_repo = CurrencyRepository::from(app_state);
-        let fx_rate_repo = FxRateRepository::from(app_state);
-        Self { currency_repo, fx_rate_repo, redis_pool: Option::from(app_state.redis_pool.clone()) }
+        Self {
+            currency_repo: CurrencyRepository::from(app_state),
+            fx_rate_repo: FxRateRepository::from(app_state),
+            redis_pool: app_state.redis_pool.clone()
+        }
     }
 }
 

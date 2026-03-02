@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 
-use crate::modules::people::people_command::PeopleCreateCommand;
+use crate::modules::people::people_command::{PeopleCreateCommand, PeopleUpdateCommand};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct People {
@@ -12,7 +12,7 @@ pub struct People {
     pub name: String,
     pub email: Option<String>,
     pub phone: Option<String>,
-    pub image_url: Option<String>,
+    pub image: Option<Uuid>,
     pub note: Option<String>,
 
     pub archived: bool,
@@ -28,7 +28,7 @@ impl From<PeopleCreateCommand> for People {
             name: command.name,
             email: command.email,
             phone: command.phone,
-            image_url: command.image_url,
+            image: command.image,
             note: command.note,
             archived: false,
             created_at: None,
