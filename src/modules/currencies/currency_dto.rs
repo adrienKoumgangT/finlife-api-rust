@@ -94,8 +94,8 @@ pub struct FxRateCreateRequest {
     pub base_code: String,
     pub quote_code: String,
     pub rate: Decimal,
-    pub as_of_date: NaiveDate,
-    pub source: String,
+    pub as_of_date: Option<NaiveDate>,
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

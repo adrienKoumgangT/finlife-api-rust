@@ -108,7 +108,7 @@ impl Modify for SecurityAddon {
         currency_controller::get_currency, currency_controller::delete_currency,
     
         currency_controller::get_fx_rates_by_base_code,
-        currency_controller::get_fx_rates, currency_controller::post_fx_rate,
+        currency_controller::post_fx_rate,
         currency_controller::get_fx_rate, currency_controller::put_fx_rate, currency_controller::delete_fx_rate,
 
         email_controller::get_templates, email_controller::create_template,

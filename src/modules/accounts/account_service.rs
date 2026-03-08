@@ -120,11 +120,11 @@ impl AccountService {
         Ok(())
     }
 
-    async fn handle_res_opt_account(&self, account: Option<Account>, user: &Uuid) -> Result<Option<AccountResponse>, AppError> {
+    async fn handle_res_opt_account(&self, account: Option<Account>, delete_cache_list: bool, user: &Uuid) -> Result<Option<AccountResponse>, AppError> {
         if let Some(acc) = account {
             let response = AccountResponse::from(acc);
             self.cache_account(&response).await?;
-            self.delete_cache_list(user).await?;
+            if delete_cache_list { self.delete_cache_list(user).await?; }
 
             Ok(Some(response))
         } else {
@@ -143,7 +143,7 @@ impl AccountInterface for AccountService {
 
         let account = self.account_repo.get(command.account_id, command.auth_user.user_id).await?;
 
-        self.handle_res_opt_account(account, &command.auth_user.user_id).await
+        self.handle_res_opt_account(account, false, &command.auth_user.user_id).await
     }
 
     async fn create(&self, command: AccountCreateCommand) -> Result<AccountResponse, AppError> {
@@ -166,7 +166,7 @@ impl AccountInterface for AccountService {
             command.institution, command.auth_user.user_id
         ).await?;
 
-        self.handle_res_opt_account(account, &command.auth_user.user_id).await
+        self.handle_res_opt_account(account, true, &command.auth_user.user_id).await
     }
 
     async fn archived(&self, command: AccountArchivedCommand) -> Result<Option<AccountResponse>, AppError> {
@@ -174,7 +174,7 @@ impl AccountInterface for AccountService {
             command.account_id, command.archived, command.auth_user.user_id
         ).await?;
 
-        self.handle_res_opt_account(account, &command.auth_user.user_id).await
+        self.handle_res_opt_account(account, true, &command.auth_user.user_id).await
     }
 
     async fn delete(&self, command: AccountDeleteCommand) -> Result<(), AppError> {

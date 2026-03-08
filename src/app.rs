@@ -56,6 +56,8 @@ pub async fn build_app(cfg: AppConfig) -> anyhow::Result<App> {
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
 
+        .layer(axum_metrics::MetricLayer::default())
+
         // Health endpoint
         .route("/health", get(|| async { "ok" }))
 

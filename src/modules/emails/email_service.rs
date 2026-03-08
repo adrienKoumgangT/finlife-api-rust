@@ -68,6 +68,8 @@ impl EmailService {
     fn key_templates(&self) -> String { "emails:templates".to_string() }
     fn key_msg_list(&self, user_id: &Uuid) -> String { format!("user:{}:emails", user_id) }
     fn key_evt_list(&self, msg_id: &Uuid) -> String { format!("email:{}:events", msg_id) }
+
+    // TODO: define cache operation and extract it from service (see categories)
 }
 
 #[async_trait]

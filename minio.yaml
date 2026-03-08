@@ -49,6 +49,9 @@ spec:
               value: "minioadmin"
             - name: MINIO_ROOT_PASSWORD
               value: "minioadmin123"
+            # ADDED: Allows Prometheus to scrape without authentication
+            - name: MINIO_PROMETHEUS_AUTH_TYPE
+              value: "public"
           ports:
             - containerPort: 9000
               name: api
@@ -81,3 +84,22 @@ spec:
       targetPort: 9001
   selector:
     app: minio
+
+---
+# Tell Prometheus to scrape the MinIO api port
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: minio-monitor
+  labels:
+    # Crucial: Tells the kube-prometheus-stack to pick up this config
+    release: monitoring
+    app: minio
+spec:
+  selector:
+    matchLabels:
+      app: minio
+  endpoints:
+    - port: api  # Matches the port name in your Service above
+      path: /minio/v2/metrics/cluster
+      interval: 30s

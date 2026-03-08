@@ -1,4 +1,4 @@
-use axum::{extract::{Path, State}, http::StatusCode, routing::{get}, Json, Router};
+use axum::{extract::{Path, State}, http::StatusCode, routing::{get, post}, Json, Router};
 use axum::extract::Query;
 use uuid::Uuid;
 
@@ -22,7 +22,7 @@ pub fn routes() -> Router<AppState> {
 
         .route("/{currency_code}/fx/rates", get(get_fx_rates_by_base_code))
 
-        .route("/fx/rates", get(get_fx_rates).post(post_fx_rate))
+        .route("/fx/rates", post(post_fx_rate))
         .route("/fx/rates/{fx_rate_id}", get(get_fx_rate).put(put_fx_rate).delete(delete_fx_rate))
 }
 
@@ -170,27 +170,6 @@ pub async fn delete_currency(
 }
 
 
-#[utoipa::path(
-    get,
-    path = "/api/services/currencies/fx/rates",
-    responses(
-        (status = StatusCode::OK, description = "List of Fx Rates", body = Vec<FxRateResponse>),
-        (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal Server Error")
-    ),
-    tag = "FX"
-)]
-pub async fn get_fx_rates(
-    State(state): State<AppState>,
-    auth_user: AuthUser,
-    Query(pagination): Query<PaginationRequest>,
-) -> Result<Json<Vec<FxRateResponse>>, AppError> {
-    let command = FxRateListCommand::new(Some(pagination), auth_user);
-    let currency_service = CurrencyService::from(&state);
-
-    let fx_rates = currency_service.list_fx_rates(command).await?;
-
-    Ok(Json(fx_rates))
-}
 
 
 #[utoipa::path(

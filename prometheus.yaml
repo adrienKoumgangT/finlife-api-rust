@@ -1,0 +1,85 @@
+---
+# 1. The Configuration File (Tells Prometheus who to talk to)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: default
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s # How often to fetch metrics
+
+    scrape_configs:
+      # Scrape itself
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Scrape your MinIO native endpoint
+      - job_name: 'minio'
+        metrics_path: '/minio/v2/metrics/cluster'
+        static_configs:
+          - targets: ['minio:9000']
+
+      # Scrape your new Redis Exporter
+      - job_name: 'redis'
+        static_configs:
+          - targets: ['redis-exporter:9121']
+
+      # Scrape your new MySQL Exporter
+      - job_name: 'mysql'
+        static_configs:
+          - targets: ['mysql-exporter:9104']
+
+---
+# 2. The Prometheus Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: default
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          ports:
+            - containerPort: 9090
+              name: web
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+      volumes:
+        - name: config-volume
+          configMap:
+            name: prometheus-config
+
+---
+# 3. The Prometheus Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: default
+  labels:
+    app: prometheus
+spec:
+  type: LoadBalancer # Exposes it to your local Mac
+  ports:
+    - port: 9090
+      targetPort: 9090
+      name: web
+  selector:
+    app: prometheus

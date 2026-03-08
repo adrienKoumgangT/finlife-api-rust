@@ -120,7 +120,7 @@ impl CategoryService {
         Ok(())
     }
 
-    async fn handle_res_opt_category(&self, category: anyhow::Result<Option<Category>>, auth_user: &Uuid) -> Result<Option<CategoryResponse>, AppError> {
+    async fn handle_res_opt_category(&self, category: Result<Option<Category>>, delete_cache_list: bool, auth_user: &Uuid) -> Result<Option<CategoryResponse>, AppError> {
         let category = category.map_err(AppError::Internal)?;
 
         if let Some(cat) = category {
@@ -128,10 +128,7 @@ impl CategoryService {
             self.cache_category(&response).await?;
 
             // Invalidate the list cache whenever a category is updated
-            if let Some(redis_pool) = &self.redis_pool {
-                let _: () = delete_key(&redis_pool, self.form_redis_key_list_by_user(auth_user).as_str()).await
-                    .map_err(AppError::Internal)?;
-            }
+            if delete_cache_list { self.delete_cache_list(auth_user).await?; }
 
             Ok(Some(response))
         } else {
@@ -149,7 +146,7 @@ impl CategoryInterface for CategoryService {
         }
 
         let category = self.category_repo.get(command.category_id, command.auth_user.user_id).await;
-        self.handle_res_opt_category(category, &command.auth_user.user_id).await
+        self.handle_res_opt_category(category, false, &command.auth_user.user_id).await
     }
 
     async fn create(&self, command: CategoryCreateCommand) -> Result<CategoryResponse, AppError> {
@@ -172,7 +169,7 @@ impl CategoryInterface for CategoryService {
             command.sort_order.unwrap_or(0), command.auth_user.user_id
         ).await;
 
-        self.handle_res_opt_category(category, &command.auth_user.user_id).await
+        self.handle_res_opt_category(category, true, &command.auth_user.user_id).await
     }
 
     async fn archived(&self, command: CategoryArchivedCommand) -> Result<Option<CategoryResponse>, AppError> {
@@ -180,7 +177,7 @@ impl CategoryInterface for CategoryService {
             command.category_id, command.archived, command.auth_user.user_id
         ).await;
 
-        self.handle_res_opt_category(category, &command.auth_user.user_id).await
+        self.handle_res_opt_category(category, true, &command.auth_user.user_id).await
     }
 
     async fn delete(&self, command: CategoryDeleteCommand) -> Result<(), AppError> {
@@ -199,7 +196,7 @@ impl CategoryInterface for CategoryService {
         let categories = self.category_repo.get_by_user(command.user_id).await
             .map_err(AppError::Internal)?;
 
-        let response: Vec<CategoryResponse> = categories.into_iter().map(CategoryResponse::from).collect();
+        let response = categories.into_iter().map(CategoryResponse::from).collect();
         self.cache_categories_by_user(&command.user_id, &response).await?;
 
         Ok(response)

@@ -104,17 +104,22 @@ impl LocationService {
         Ok(())
     }
 
-    async fn handle_res_opt_location(&self, location: Result<Option<Location>>, auth_user: &Uuid) -> Result<Option<LocationResponse>, AppError> {
+    async fn delete_cache_list(&self, user: &Uuid) -> Result<(), AppError> {
+        if let Some(redis_pool) = &self.redis_pool {
+            let _: () = delete_key(&redis_pool, self.form_redis_key_list_by_user(user).as_str()).await
+                .map_err(AppError::Internal)?;
+        }
+        Ok(())
+    }
+
+    async fn handle_res_opt_location(&self, location: Result<Option<Location>>, delete_cache_list: bool, auth_user: &Uuid) -> Result<Option<LocationResponse>, AppError> {
         let location = location.map_err(AppError::Internal)?;
 
         if let Some(loc) = location {
             let response = LocationResponse::from(loc);
             self.cache_location(&response).await?;
 
-            if let Some(redis_pool) = &self.redis_pool {
-                let _: () = delete_key(&redis_pool, self.form_redis_key_list_by_user(auth_user).as_str()).await
-                    .map_err(AppError::Internal)?;
-            }
+            if delete_cache_list { self.delete_cache_list(auth_user).await?; }
 
             Ok(Some(response))
         } else {
@@ -132,7 +137,7 @@ impl LocationInterface for LocationService {
         }
 
         let location = self.location_repo.get(command.location_id, Some(command.auth_user.user_id)).await;
-        self.handle_res_opt_location(location, &command.auth_user.user_id).await
+        self.handle_res_opt_location(location, false, &command.auth_user.user_id).await
     }
 
     async fn create(&self, command: LocationCreateCommand) -> Result<LocationResponse, AppError> {
@@ -166,7 +171,7 @@ impl LocationInterface for LocationService {
 
         self.delete_cache(&location_id, &meta_user).await?;
 
-        self.handle_res_opt_location(location, &command.auth_user.user_id).await
+        self.handle_res_opt_location(location, true, &command.auth_user.user_id).await
     }
 
     async fn update_lat_long(&self, command: LocationUpdateLatLongCommand) -> Result<Option<LocationResponse>, AppError> {
@@ -179,7 +184,7 @@ impl LocationInterface for LocationService {
 
         self.delete_cache(&location_id, &meta_user).await?;
 
-        self.handle_res_opt_location(location, &command.auth_user.user_id).await
+        self.handle_res_opt_location(location, true, &command.auth_user.user_id).await
     }
 
     async fn archived(&self, command: LocationArchivedCommand) -> Result<Option<LocationResponse>, AppError> {
@@ -192,7 +197,7 @@ impl LocationInterface for LocationService {
 
         self.delete_cache(&location_id, &meta_user).await?;
 
-        self.handle_res_opt_location(location, &command.auth_user.user_id).await
+        self.handle_res_opt_location(location, true, &command.auth_user.user_id).await
     }
 
     async fn delete(&self, command: LocationDeleteCommand) -> Result<(), AppError> {

@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
@@ -139,8 +139,8 @@ impl FxRateCreateCommand {
             base_code: request.base_code,
             quote_code: request.quote_code,
             rate: request.rate,
-            as_of_date: request.as_of_date,
-            source: request.source,
+            as_of_date: request.as_of_date.unwrap_or_else(|| Utc::now().date_naive()),
+            source: request.source.unwrap_or_else(|| "manual".to_string()),
             auth_user,
         }
     }

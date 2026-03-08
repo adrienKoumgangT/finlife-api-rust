@@ -141,11 +141,11 @@ impl BudgetService {
         Ok(())
     }
 
-    async fn handle_res_opt_budget(&self, budget: Option<Budget>, user: &Uuid) -> Result<Option<BudgetResponse>, AppError> {
+    async fn handle_res_opt_budget(&self, budget: Option<Budget>, delete_cache_list: bool, user: &Uuid) -> Result<Option<BudgetResponse>, AppError> {
         if let Some(b) = budget {
             let response = BudgetResponse::from(b);
             self.cache_budget(&response).await?;
-            self.delete_list_budget_cache(user, &(response.month.year() as u32)).await?;
+            if delete_cache_list { self.delete_list_budget_cache(user, &(response.month.year() as u32)).await?; }
 
             Ok(Some(response))
         } else {
@@ -250,7 +250,7 @@ impl BudgetInterface for BudgetService {
         }
 
         let budget = self.budget_repo.get_budget(command.budget_id, command.auth_user.user_id).await?;
-        self.handle_res_opt_budget(budget, &command.auth_user.user_id).await
+        self.handle_res_opt_budget(budget, false, &command.auth_user.user_id).await
     }
 
     async fn create_budget(&self, command: BudgetCreateCommand) -> Result<BudgetResponse, AppError> {
@@ -273,7 +273,7 @@ impl BudgetInterface for BudgetService {
             command.status, command.auth_user.user_id
         ).await?;
 
-        self.handle_res_opt_budget(budget, &command.auth_user.user_id).await
+        self.handle_res_opt_budget(budget, true, &command.auth_user.user_id).await
     }
 
     async fn delete_budget(&self, command: BudgetDeleteCommand) -> Result<(), AppError> {
